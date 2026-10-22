@@ -19,9 +19,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # Naye (humne add kiye)
+    # I have added new 
     'rest_framework',
     'users',
+    'clients',
 ]
 
 # Custom user model (sabse zaroori)
@@ -74,37 +75,43 @@ AUTH_PASSWORD_VALIDATORS = [
 
 
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
 
-# Media (image upload ke liye)
+# Media (for image upload)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 
-# Email: tumhare MAILERS block me console backend pehle se hai,
-# isliye email terminal me print hoga. Isse waise hi rehne do.
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
-DEFAULT_FROM_EMAIL = 'noreply@example.com'
+# Email configuration for Gmail SMTP
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'bhardwajkeshav1002@gmail.com'
+EMAIL_HOST_PASSWORD = 'dmriddzzwhhkxiud'
+DEFAULT_FROM_EMAIL = 'bhardwajkeshav1002@gmail.com'
 OTP_EXPIRY_MINUTES = 5
 
 
 # DRF + JWT
+# DRF + JWT
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',    
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    # We don’t need to create pagination functions separately for every new app.”
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
 }
+
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),

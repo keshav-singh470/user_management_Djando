@@ -71,6 +71,11 @@ OTP expiry is set by `OTP_EXPIRY_MINUTES` in `settings.py` (default: 5 minutes).
 | POST | `/api/auth/verify-otp/` | Verify OTP | No |
 | POST | `/api/auth/forgot-password/` | Send password-reset OTP | No |
 | POST | `/api/auth/reset-password/` | Reset password using OTP | No |
+| GET | `/api/clients/` | List clients (Paginated: `?page=1&page_size=10`) | Yes |
+| POST | `/api/clients/` | Create client | Yes |
+| GET | `/api/clients/{id}/` | Retrieve client | Yes |
+| PATCH / PUT | `/api/clients/{id}/` | Update client | Yes |
+| DELETE | `/api/clients/{id}/` | Soft delete (`is_active` = False) | Yes |
 
 Protected endpoints need this header:
 
