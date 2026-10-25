@@ -1,5 +1,8 @@
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,7 +25,6 @@ INSTALLED_APPS = [
     # I have added new 
     'rest_framework',
     'users',
-    'clients',
 ]
 
 # Custom user model (sabse zaroori)
@@ -91,9 +93,9 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'bhardwajkeshav1002@gmail.com'
-EMAIL_HOST_PASSWORD = 'dmriddzzwhhkxiud'
-DEFAULT_FROM_EMAIL = 'bhardwajkeshav1002@gmail.com'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 OTP_EXPIRY_MINUTES = 5
 
 
