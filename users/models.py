@@ -1,22 +1,23 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+class Profile(models.Model):
+    name = models.CharField(max_length=50, unique=True) # e.g. Admin, Developer, HR, Manager
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    def __str__(self):
+        return self.name
+
 
 class User(AbstractUser):
-    PROFILE_CHOICES = [
-        ('Administrator', 'Administrator'),
-        ('Standard', 'Standard'),
-        ('Developer', 'Developer'),
-        ('Client', 'Client'),
-        ('Human Resource', 'Human Resource'),
-    ]
+    email = models.EmailField(unique=True)
+    profiles = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    
     STATUS_CHOICES = [('Active', 'Active'), ('Inactive', 'Inactive')]
     GENDER_CHOICES = [('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')]
     BLOOD_CHOICES = [(b, b) for b in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']]
 
     # first_name, last_name, username already available in AbstractUser 
-    email = models.EmailField(unique=True)
-    profiles = models.CharField(max_length=20, choices=PROFILE_CHOICES, default='Standard')
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True)
     nationality = models.CharField(max_length=50, blank=True, null=True)
@@ -61,3 +62,40 @@ class Client(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email_id})"
+
+
+# Projects
+class Project(models.Model):
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('In Progress', 'In Progress'),
+        ('Completed', 'Completed'),
+        ('On Hold', 'On Hold'),
+    ]
+
+    title = models.CharField(max_length=200)
+    type = models.CharField(max_length=100) # e.g. Web App, Mobile App, AI, etc.
+    date_of_completion = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+
+    # Relations (Client aur Manager)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='projects')
+    assigned_manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='managed_projects')
+
+    # Soft Delete tracking
+    is_active = models.BooleanField(default=True) # False matlab soft deleted
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_projects')
+
+    # Audit Tracking (Kisne banaya / kab update hua)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_projects')
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_projects')
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self):
+        return f"{self.title} ({self.client.first_name})"
+

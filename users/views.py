@@ -7,7 +7,7 @@ from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 
 
-from .models import User, Client
+from .models import User, Client, Project
 from .serializers import *
 from .utils import create_and_send_otp, send_welcome_email, verify_otp
 
@@ -120,7 +120,7 @@ class UserActivateView(APIView):
 
 class UserDeactivateView(APIView):
     """
-    POST /api/users/<id>/deactivate/ -> User ko Inactive karna
+    POST /api/users/<id>/deactivate/ -> Change the user’s status to inactive
     """
     permission_classes = [IsAuthenticated]
 
@@ -165,12 +165,12 @@ class SendOTPView(APIView):
 
     def post(self, request):
         send_otp_serializer = SendOTPSerializer(data=request.data)
-        # Agar limit cross hui hogi to yahi par ValidationError raise ho jayegi:
+        # If the limit is exceeded, a ValidationError will be raised here
         send_otp_serializer.is_valid(raise_exception=True)
         
         user = get_active_user(send_otp_serializer.validated_data['email'])
         if user:
-            # Success hone par attempt count badhao:
+            # Increment the attempt count when the operation is successful.
             send_otp_serializer.record_attempt()
             create_and_send_otp(user, 'verify')
             
@@ -198,6 +198,7 @@ class ForgotPasswordView(APIView):
         forgot_password_serializer.is_valid(raise_exception=True)
         user = get_active_user(forgot_password_serializer.validated_data['email'])
         if user:
+            forgot_password_serializer.record_attempt()  # <-- Attempt count is recorded.
             create_and_send_otp(user, 'reset')
         return Response({'message': 'If the email exists, a reset OTP has been sent'})
 
@@ -333,4 +334,90 @@ class ClientDeactivateView(APIView):
         client.save()
         return Response({'message': f'Client {client.first_name} has been deactivated!'}, status=status.HTTP_200_OK)
 
+# ==========================================
+# PROJECT VIEWS (APIView)
+# ==========================================
+
+class ProjectListCreateView(APIView):
+    """
+    GET  /api/projects/             -> Active projects list (Paginated)
+    GET  /api/projects/?is_active=false -> Soft-deleted projects list
+    GET  /api/projects/?all=true    -> All projects
+    POST /api/projects/             -> Create new project (Authenticated)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.query_params.get('all') == 'true':
+            projects = Project.objects.all().order_by('-id')
+        elif request.query_params.get('is_active') == 'false':
+            projects = Project.objects.filter(is_active=False).order_by('-id')
+        else:
+            projects = Project.objects.filter(is_active=True).order_by('-id')
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        page = paginator.paginate_queryset(projects, request)
+        serializer = ProjectSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def post(self, request):
+        serializer = ProjectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Login user ko created_by assign karein:
+        project = serializer.save(created_by=request.user)
+        return Response(ProjectSerializer(project).data, status=status.HTTP_201_CREATED)
+
+
+class ProjectDetailView(APIView):
+    """
+    GET    /api/projects/<id>/ -> Retrieve single project
+    PATCH  /api/projects/<id>/ -> Partial update project
+    PUT    /api/projects/<id>/ -> Full update project
+    DELETE /api/projects/<id>/ -> Soft delete (is_active = False)
+    DELETE /api/projects/<id>/?hard=true -> Permanent delete
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        try:
+            return Project.objects.get(pk=pk)
+        except Project.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        project = self.get_object(pk)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ProjectSerializer(project).data)
+
+    def patch(self, request, pk):
+        project = self.get_object(pk)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ProjectSerializer(project, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        # Login user ko updated_by assign karein:
+        serializer.save(updated_by=request.user)
+        return Response(serializer.data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        project = self.get_object(pk)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Hard delete option:
+        if request.query_params.get('hard') == 'true':
+            project.delete()
+            return Response({'message': 'Project permanently deleted'}, status=status.HTTP_200_OK)
+
+        # Soft delete:
+        project.is_active = False
+        project.deleted_by = request.user
+        project.deleted_at = timezone.now()
+        project.save()
+        return Response({'message': 'Project soft-deleted successfully'}, status=status.HTTP_200_OK)
 
