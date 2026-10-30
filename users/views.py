@@ -6,8 +6,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 
+import os
 
-from .models import User, Client, Project
+
+from .models import User, Client, Project, Profile, ProjectAttachment
 from .serializers import *
 from .utils import create_and_send_otp, send_welcome_email, verify_otp
 
@@ -36,7 +38,7 @@ class UserListCreateView(APIView):
             users = User.objects.all().order_by('-id')
         else:
             users = User.objects.filter(status='Active').order_by('-id')
-
+ 
         paginator = PageNumberPagination()
         paginator.page_size = 10
         page = paginator.paginate_queryset(users, request)
@@ -63,7 +65,7 @@ class UserDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            return User.objects.get(pk=pk)
+            return User.objects.get(pk=pk, is_active=True)
         except User.DoesNotExist:
             return None
 
@@ -216,6 +218,68 @@ class ResetPasswordView(APIView):
         user.save()
         return Response({'message': 'Password reset successful'})
 
+# ==========================================
+# PROFILE VIEWS (APIView)
+# ==========================================
+
+class ProfileListCreateView(APIView):
+    """
+    GET  /api/profiles/  -> List all profiles
+    POST /api/profiles/  -> Create new profile
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profiles = Profile.objects.all().order_by('name')
+        serializer = ProfileSerializer(profiles, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = ProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = serializer.save()
+        return Response(ProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
+
+
+class ProfileDetailView(APIView):
+    """
+    GET    /api/profiles/<id>/ -> Single profile
+    PATCH  /api/profiles/<id>/ -> Partial update
+    PUT    /api/profiles/<id>/ -> Full update
+    DELETE /api/profiles/<id>/ -> Hard delete
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        try:
+            return Profile.objects.get(pk=pk)
+        except Profile.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        profile = self.get_object(pk)
+        if not profile:
+            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ProfileSerializer(profile).data)
+
+    def patch(self, request, pk):
+        profile = self.get_object(pk)
+        if not profile:
+            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        profile = self.get_object(pk)
+        if not profile:
+            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        profile.delete()
+        return Response({'message': 'Profile permanently deleted'}, status=status.HTTP_200_OK)
 
 # ==========================================
 # CLIENT VIEWS (APIView)
@@ -263,7 +327,7 @@ class ClientDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            return Client.objects.get(pk=pk)
+            return Client.objects.get(pk=pk, is_active=True)
         except Client.DoesNotExist:
             return None
 
@@ -349,16 +413,16 @@ class ProjectListCreateView(APIView):
 
     def get(self, request):
         if request.query_params.get('all') == 'true':
-            projects = Project.objects.all().order_by('-id')
+            projects = Project.objects.all().prefetch_related('attachments').order_by('-id')
         elif request.query_params.get('is_active') == 'false':
-            projects = Project.objects.filter(is_active=False).order_by('-id')
+            projects = Project.objects.filter(is_active=False).prefetch_related('attachments').order_by('-id')
         else:
-            projects = Project.objects.filter(is_active=True).order_by('-id')
+            projects = Project.objects.filter(is_active=True).prefetch_related('attachments').order_by('-id')
 
         paginator = PageNumberPagination()
         paginator.page_size = 10
         page = paginator.paginate_queryset(projects, request)
-        serializer = ProjectSerializer(page, many=True)
+        serializer = ProjectSerializer(page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
@@ -366,7 +430,7 @@ class ProjectListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         # Login user ko created_by assign karein:
         project = serializer.save(created_by=request.user)
-        return Response(ProjectSerializer(project).data, status=status.HTTP_201_CREATED)
+        return Response(ProjectSerializer(project, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
 class ProjectDetailView(APIView):
@@ -381,7 +445,7 @@ class ProjectDetailView(APIView):
 
     def get_object(self, pk):
         try:
-            return Project.objects.get(pk=pk)
+            return Project.objects.get(pk=pk, is_active=True)
         except Project.DoesNotExist:
             return None
 
@@ -389,7 +453,9 @@ class ProjectDetailView(APIView):
         project = self.get_object(pk)
         if not project:
             return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(ProjectSerializer(project).data)
+        return Response(ProjectSerializer(
+                            project, context={'request': request, 'include_attachments': True}
+                         ).data)
 
     def patch(self, request, pk):
         project = self.get_object(pk)
@@ -421,3 +487,66 @@ class ProjectDetailView(APIView):
         project.save()
         return Response({'message': 'Project soft-deleted successfully'}, status=status.HTTP_200_OK)
 
+
+# ==========================================
+# PROJECT ATTACHMENT 
+# ==========================================
+
+class ProjectAttachmentView(APIView):
+    """
+    GET    /api/projects/<id>/attachments/        -> List all attachments of a project
+    POST   /api/projects/<id>/attachments/        -> Upload new attachment
+    DELETE /api/projects/<id>/attachments/<att_id>/ -> Delete an attachment
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_project(self, pk):
+        try:
+            return Project.objects.get(pk=pk, is_active=True)
+        except Project.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        project = self.get_project(pk)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        attachments = project.attachments.all()
+        serializer = ProjectAttachmentSerializer(attachments, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    def post(self, request, pk):
+        project = self.get_project(pk)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProjectAttachmentSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        # file_name auto-set from uploaded file if not provided
+        file = serializer.validated_data['file']
+        file_name = serializer.validated_data.get('file_name') or file.name
+
+        attachment = serializer.save(
+            project=project,
+            uploaded_by=request.user,
+            file_name=file_name
+        )
+        return Response(ProjectAttachmentSerializer(attachment, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+
+class ProjectAttachmentDeleteView(APIView):
+    """
+    DELETE /api/projects/<id>/attachments/<att_id>/ -> Delete specific attachment
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, att_id):
+        try:
+            attachment = ProjectAttachment.objects.get(pk=att_id, project_id=pk)
+        except ProjectAttachment.DoesNotExist:
+            return Response({'error': 'Attachment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        attachment.file.delete(save=False)  # disk se bhi file delete hogi
+        attachment.delete()
+        return Response({'message': 'Attachment deleted successfully'}, status=status.HTTP_200_OK)

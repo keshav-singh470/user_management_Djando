@@ -3,7 +3,7 @@ from django.db import models
 
 class Profile(models.Model):
     name = models.CharField(max_length=50, unique=True) # e.g. Admin, Developer, HR, Manager
-    description = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True) 
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.name
@@ -24,7 +24,7 @@ class User(AbstractUser):
     image = models.ImageField(upload_to='users/', null=True, blank=True)
     blood_group = models.CharField(max_length=3, choices=BLOOD_CHOICES, blank=True, null=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
-    permanent_address = models.TextField(blank=True, null=True)
+    permanent_address = models.TextField(blank=True, null=True) 
     current_address = models.TextField(blank=True, null = True)
     emergency_contact_name = models.CharField(max_length=100, blank=True, null = True)
     emergency_contact_number = models.CharField(max_length=15, blank=True, null = True)
@@ -77,13 +77,14 @@ class Project(models.Model):
     type = models.CharField(max_length=100) # e.g. Web App, Mobile App, AI, etc.
     date_of_completion = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    description = models.TextField(null=True, blank=True)
 
-    # Relations (Client aur Manager)
-    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='projects')
+    # Relations (Client and Manager)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, null=True, blank=True, related_name='projects' )
     assigned_manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='managed_projects')
 
     # Soft Delete tracking
-    is_active = models.BooleanField(default=True) # False matlab soft deleted
+    is_active = models.BooleanField(default=True) # False it means soft deleted
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_projects')
 
@@ -97,5 +98,25 @@ class Project(models.Model):
         ordering = ['-id']
 
     def __str__(self):
-        return f"{self.title} ({self.client.first_name})"
+        # 2. Safe if client is None 
+        client_name = self.client.first_name if self.client else "No Client"
+        return f"{self.title} ({client_name})"
 
+ 
+
+class ProjectAttachment(models.Model):
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name='attachments'
+    )
+    file = models.FileField(upload_to='project_attachments/')
+    file_name = models.CharField(max_length=255, blank=True)
+    uploaded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_attachments'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.file_name} ({self.project.title})"

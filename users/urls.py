@@ -15,6 +15,10 @@ urlpatterns = [
     path('users/<int:pk>/activate/', views.UserActivateView.as_view()),
     path('users/<int:pk>/deactivate/', views.UserDeactivateView.as_view()),
 
+    # Profile endpoints
+    path('profiles/', views.ProfileListCreateView.as_view()),
+    path('profiles/<int:pk>/', views.ProfileDetailView.as_view()),
+
     # Client endpoints (APIView)
     path('clients/', views.ClientListCreateView.as_view()),
     path('clients/<int:pk>/', views.ClientDetailView.as_view()),
@@ -24,4 +28,8 @@ urlpatterns = [
     # Project endpoints (APIView)
     path('projects/', views.ProjectListCreateView.as_view()),            
     path('projects/<int:pk>/', views.ProjectDetailView.as_view()),
+
+    # Project Attachment endpoints
+    path('projects/<int:pk>/attachments/', views.ProjectAttachmentView.as_view()),
+    path('projects/<int:pk>/attachments/<int:att_id>/', views.ProjectAttachmentDeleteView.as_view()),
 ]

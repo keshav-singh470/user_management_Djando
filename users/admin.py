@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Client, Project
+from .models import User, Client, Project, Profile 
 
 admin.site.register(User, UserAdmin)
 
@@ -28,3 +28,8 @@ class ProjectAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'type', 'status', 'client', 'assigned_manager', 'is_active', 'date_of_completion')
     list_filter = ('status', 'type', 'is_active')
     search_fields = ('title', 'client__first_name', 'assigned_manager__username')
+
+@admin.register(Profile)
+class ProfileAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'description', 'created_at')
+    search_fields = ('name',)
