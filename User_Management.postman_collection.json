@@ -2,13 +2,25 @@
   "info": {
     "name": "User Management APIs",
     "_postman_id": "um-complete-suite-2026",
-    "description": "Complete End-to-End API collection for User Management System covering Auth, Users, Profiles, Clients, Projects, and Project Attachments with all positive & negative test cases.",
+    "description": "End-to-end API collection: Auth, Users, Profiles (default + custom), Clients, Projects (with attachments inside the Project API) and Restore APIs, with positive and negative cases.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "http://127.0.0.1:8000/api", "type": "string" },
-    { "key": "access_token", "value": "", "type": "string" },
-    { "key": "refresh_token", "value": "", "type": "string" }
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -16,6 +28,20 @@
       "item": [
         {
           "name": "Login (Success - Auto Saves Token)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"password\": \"your_password\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
           "event": [
             {
               "listen": "test",
@@ -32,27 +58,23 @@
                 "type": "text/javascript"
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/auth/login/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"password\": \"your_password\"\n}"
-            }
-          }
+          ]
         },
         {
           "name": "Login - Wrong Password (401)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/login/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"password\": \"wrongpass123\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -60,11 +82,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/login/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"password\": \"pass123\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -72,11 +99,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/login/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -84,11 +116,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/send-otp/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -96,11 +133,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/send-otp/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"notanemail\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -108,11 +150,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/verify-otp/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"otp\": \"123456\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -120,11 +167,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/verify-otp/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"otp\": \"12\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -132,11 +184,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/forgot-password/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -144,11 +201,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/auth/reset-password/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"otp\": \"123456\",\n  \"new_password\": \"NewStrongPass@123\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         }
       ]
@@ -161,7 +223,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/users/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -170,11 +237,26 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/users/?status=inactive",
-              "host": ["{{base_url}}"],
-              "path": ["users", ""],
-              "query": [{ "key": "status", "value": "inactive" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "inactive"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -183,23 +265,98 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/users/?status=all",
-              "host": ["{{base_url}}"],
-              "path": ["users", ""],
-              "query": [{ "key": "status", "value": "all" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "all"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
-          "name": "Create User (Success)",
+          "name": "Create User (Success - profile required)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/users/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Rahul\",\n  \"last_name\": \"Sharma\",\n  \"email\": \"rahul.sharma@example.com\",\n  \"profiles\": \"Developer\",\n  \"phone\": \"9876543210\",\n  \"gender\": \"male\",\n  \"blood_group\": \"o+\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "profiles is REQUIRED. Use an existing profile name (case-insensitive)."
+          }
+        },
+        {
+          "name": "Create User - New Profile Auto-Created",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Neha\",\n  \"last_name\": \"Verma\",\n  \"email\": \"neha.verma@example.com\",\n  \"profiles\": \"QA Engineer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "If the profile name does not exist, a new (non-default, deletable) profile is created automatically."
+          }
+        },
+        {
+          "name": "Create User - Missing Profile (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Test\",\n  \"email\": \"noprofile@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Expect 400: Profile is required."
+          }
+        },
+        {
+          "name": "Create User - Blank Profile (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Test\",\n  \"email\": \"blankprofile@example.com\",\n  \"profiles\": \"   \"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Expect 400: Profile cannot be blank."
           }
         },
         {
@@ -207,11 +364,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/users/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\"\n}"
-            }
+              "raw": "{\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"profiles\": \"Developer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -219,11 +381,16 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/users/",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"first_name\": \"Duplicate\"\n}"
-            }
+              "raw": "{\n  \"email\": \"keshav.ptu21@gmail.com\",\n  \"first_name\": \"Duplicate\",\n  \"profiles\": \"Developer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -231,7 +398,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/users/24/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -239,7 +411,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/users/99999/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -247,14 +424,41 @@
           "request": {
             "method": "PATCH",
             "url": "{{base_url}}/users/24/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"current_address\": \"Noida Sector 62, Uttar Pradesh\",\n  \"emergency_contact_number\": \"9876543211\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Update User - Change Profile (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/users/24/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profiles\": \"Manager\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -262,7 +466,13 @@
           "request": {
             "method": "DELETE",
             "url": "{{base_url}}/users/25/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Records deleted_by + deleted_at. Use Restore User below to bring it back."
           }
         },
         {
@@ -271,11 +481,27 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/users/25/?hard=true",
-              "host": ["{{base_url}}"],
-              "path": ["users", "25", ""],
-              "query": [{ "key": "hard", "value": "true" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "25",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "hard",
+                  "value": "true"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -283,7 +509,12 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/users/25/activate/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -291,7 +522,52 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/users/25/deactivate/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Restore User (Success)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/25/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Works only on a soft-deleted user. Saves restored_by + restored_at."
+          }
+        },
+        {
+          "name": "Restore User - Already Active (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/24/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Restore User - Not Found (404)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/99999/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -311,7 +587,13 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/profiles/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Check is_default: true for the 5 default profiles."
           }
         },
         {
@@ -319,14 +601,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/profiles/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"DevOps Engineer\",\n  \"description\": \"Handles cloud deployment and CI/CD pipelines\"\n}"
-            }
+              "raw": "{\n  \"name\": \"DevOps Engineer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -334,14 +622,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/profiles/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"No profile name provided\"\n}"
-            }
+              "raw": "{}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -349,14 +643,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/profiles/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"   \"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -364,14 +664,42 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/profiles/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Admin\",\n  \"description\": \"Duplicate admin attempt\"\n}"
-            }
+              "raw": "{\n  \"name\": \"Admin\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Create Profile - Duplicate Name Different Case (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/profiles/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"admin\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Names are unique case-insensitively: 'admin' is rejected when 'Admin' exists."
           }
         },
         {
@@ -379,7 +707,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/profiles/1/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -387,7 +720,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/profiles/99999/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -395,22 +733,49 @@
           "request": {
             "method": "PATCH",
             "url": "{{base_url}}/profiles/1/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Updated Admin permissions and roles\"\n}"
-            }
+              "raw": "{\n  \"name\": \"Senior DevOps Engineer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Change the id to one of YOUR custom profiles."
           }
         },
         {
-          "name": "Delete Profile (Hard Delete)",
+          "name": "Delete Default Profile (Expect 403)",
           "request": {
             "method": "DELETE",
-            "url": "{{base_url}}/profiles/5/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "url": "{{base_url}}/profiles/1/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Use the id of a default profile (Admin / Human Resource / Manager / Developer / Standard). Expect 403."
+          }
+        },
+        {
+          "name": "Delete Custom Profile (Hard Delete - 200)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/profiles/6/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Use the id of a profile YOU created. Users having it will get profiles = null."
           }
         }
       ]
@@ -423,7 +788,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/clients/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -432,11 +802,26 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/clients/?is_active=false",
-              "host": ["{{base_url}}"],
-              "path": ["clients", ""],
-              "query": [{ "key": "is_active", "value": "false" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clients",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "is_active",
+                  "value": "false"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -445,11 +830,26 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/clients/?all=true",
-              "host": ["{{base_url}}"],
-              "path": ["clients", ""],
-              "query": [{ "key": "all", "value": "true" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clients",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "all",
+                  "value": "true"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -457,14 +857,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/clients/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Amar\",\n  \"last_name\": \"Sharma\",\n  \"email_id\": \"amar.sharma@example.com\",\n  \"contact_no\": \"9876543210\",\n  \"countries\": \"India\",\n  \"address\": \"Noida Sector 62, UP\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -472,14 +878,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/clients/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email_id\": \"sample@example.com\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -487,14 +899,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/clients/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Ravi\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -502,7 +920,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/clients/7/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -510,7 +933,12 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/clients/6/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -518,14 +946,20 @@
           "request": {
             "method": "PATCH",
             "url": "{{base_url}}/clients/7/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"contact_no\": \"9111111111\",\n  \"address\": \"Sector 18, Noida, UP\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -533,7 +967,12 @@
           "request": {
             "method": "DELETE",
             "url": "{{base_url}}/clients/7/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -542,11 +981,27 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/clients/7/?hard=true",
-              "host": ["{{base_url}}"],
-              "path": ["clients", "7", ""],
-              "query": [{ "key": "hard", "value": "true" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clients",
+                "7",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "hard",
+                  "value": "true"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -554,7 +1009,12 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/clients/6/activate/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -562,7 +1022,52 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/clients/7/deactivate/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Restore Client (Success)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/7/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Works only on a soft-deleted client. Saves restored_by + restored_at."
+          }
+        },
+        {
+          "name": "Restore Client - Already Active (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/6/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Restore Client - Not Found (404)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/99999/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         }
       ]
@@ -575,7 +1080,13 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/projects/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "List shows attachments_count only."
           }
         },
         {
@@ -584,11 +1095,26 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/projects/?is_active=false",
-              "host": ["{{base_url}}"],
-              "path": ["projects", ""],
-              "query": [{ "key": "is_active", "value": "false" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "is_active",
+                  "value": "false"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -597,26 +1123,48 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/projects/?all=true",
-              "host": ["{{base_url}}"],
-              "path": ["projects", ""],
-              "query": [{ "key": "all", "value": "true" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "all",
+                  "value": "true"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
-          "name": "Create Project (Success With Description)",
+          "name": "Create Project (JSON - no files)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Cloud ERP System\",\n  \"type\": \"Web App\",\n  \"description\": \"Comprehensive enterprise resource planning software\",\n  \"status\": \"Pending\",\n  \"client\": 7,\n  \"assigned_manager\": 24,\n  \"date_of_completion\": \"2026-12-31\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "JSON cannot carry files. Use the form-data request below to upload files."
           }
         },
         {
@@ -624,14 +1172,20 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"type\": \"Web App\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
           }
         },
         {
@@ -639,14 +1193,120 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Mobile Banking App\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Create Project With Attachments (form-data)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Hospital System",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "Web App",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Project with files",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "Pending",
+                  "type": "text"
+                },
+                {
+                  "key": "client",
+                  "value": "7",
+                  "type": "text"
+                },
+                {
+                  "key": "assigned_manager",
+                  "value": "24",
+                  "type": "text"
+                },
+                {
+                  "key": "date_of_completion",
+                  "value": "2027-01-01",
+                  "type": "text"
+                },
+                {
+                  "key": "uploaded_files",
+                  "type": "file",
+                  "src": [],
+                  "description": "First file (pdf/png/jpg/jpeg/doc/docx/xlsx/txt, max 10MB)"
+                },
+                {
+                  "key": "uploaded_files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Second file (same key repeated)"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Do NOT add a Content-Type header manually. Key must be exactly 'uploaded_files'."
+          }
+        },
+        {
+          "name": "Create Project - Invalid File Type (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Invalid File Test",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "Web App",
+                  "type": "text"
+                },
+                {
+                  "key": "uploaded_files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select a .exe or .zip file"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -654,7 +1314,13 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/projects/1/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Detail shows the full attachments list with ids."
           }
         },
         {
@@ -662,14 +1328,97 @@
           "request": {
             "method": "PATCH",
             "url": "{{base_url}}/projects/1/",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{access_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"In Progress\",\n  \"description\": \"Updated project scope and timeline\"\n}"
-            }
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Update Project - Add Attachments (PATCH form-data)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/projects/1/",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "uploaded_files",
+                  "type": "file",
+                  "src": [],
+                  "description": "New file to add (existing files stay)"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Update Project - Remove Specific Attachment (PATCH form-data)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/projects/1/",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "remove_attachment_ids",
+                  "value": "1",
+                  "type": "text"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Value = attachment id from the attachments list (not the project id). Repeat the key for more ids."
+          }
+        },
+        {
+          "name": "Update Project - Replace Attachment (PATCH form-data)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/projects/1/",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "remove_attachment_ids",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "uploaded_files",
+                  "type": "file",
+                  "src": [],
+                  "description": "New file that replaces the removed one"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
@@ -677,7 +1426,13 @@
           "request": {
             "method": "DELETE",
             "url": "{{base_url}}/projects/1/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Records deleted_by + deleted_at."
           }
         },
         {
@@ -686,100 +1441,67 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/projects/1/?hard=true",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "1", ""],
-              "query": [{ "key": "hard", "value": "true" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "1",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "hard",
+                  "value": "true"
+                }
+              ]
             },
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        }
-      ]
-    },
-    {
-      "name": "6. Project Attachments",
-      "item": [
-        {
-          "name": "List Project Attachments (GET)",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/projects/1/attachments/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
-          "name": "Upload Project Attachment (POST - form-data)",
+          "name": "Restore Project (Success)",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/projects/1/attachments/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Select any PDF/Image/Document to upload"
-                },
-                {
-                  "key": "file_name",
-                  "value": "Project_SRS_Document.pdf",
-                  "type": "text"
-                }
-              ]
-            }
+            "url": "{{base_url}}/projects/1/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Works only on a soft-deleted project. Response shows restored_by + restored_at."
           }
         },
         {
-          "name": "Upload Attachment - Missing File (400)",
+          "name": "Restore Project - Already Active (400)",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/projects/1/attachments/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file_name",
-                  "value": "Dummy_Name_Only.pdf",
-                  "type": "text"
-                }
-              ]
-            }
+            "url": "{{base_url}}/projects/2/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         },
         {
-          "name": "Upload Attachment - Non-existent Project (404)",
+          "name": "Restore Project - Not Found (404)",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/projects/99999/attachments/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": ""
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Delete Attachment (DELETE - 200)",
-          "request": {
-            "method": "DELETE",
-            "url": "{{base_url}}/projects/1/attachments/1/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Delete Non-existent Attachment (404)",
-          "request": {
-            "method": "DELETE",
-            "url": "{{base_url}}/projects/1/attachments/99999/",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "url": "{{base_url}}/projects/99999/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
           }
         }
       ]

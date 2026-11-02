@@ -3,7 +3,7 @@ from django.db import models
 
 class Profile(models.Model):
     name = models.CharField(max_length=50, unique=True) # e.g. Admin, Developer, HR, Manager
-    description = models.TextField(blank=True, null=True) 
+    is_default = models.BooleanField(default=False)   # True = system profile, delete nahi hoga
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.name
@@ -30,6 +30,10 @@ class User(AbstractUser):
     emergency_contact_number = models.CharField(max_length=15, blank=True, null = True)
     emergency_contact_relationship = models.CharField(max_length=50, blank=True, null = True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Active')
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_users')
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='restored_users')
 
     def __str__(self):
         return self.email
@@ -47,15 +51,18 @@ class Client(models.Model):
     email_id = models.EmailField(unique=True, null = True, blank = True)
     is_active = models.BooleanField(default=True)
     
+     
     # Timestamps (when was it created?)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)   
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    restored_at = models.DateTimeField(null=True, blank=True)
 
     # Audit tracking (who did it)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_clients')   
-    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_clients')   
-    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_clients')   
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_clients')
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_clients')
+    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_clients')
+    restored_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='restored_clients')
 
     class Meta:
         ordering = ['-id']
@@ -87,6 +94,8 @@ class Project(models.Model):
     is_active = models.BooleanField(default=True) # False it means soft deleted
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_projects')
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='restored_projects')
 
     # Audit Tracking (Kisne banaya / kab update hua)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -110,9 +119,6 @@ class ProjectAttachment(models.Model):
     )
     file = models.FileField(upload_to='project_attachments/')
     file_name = models.CharField(max_length=255, blank=True)
-    uploaded_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_attachments'
-    )
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

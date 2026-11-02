@@ -5,20 +5,19 @@ from django.core.cache import cache
 from django.db.models import Q
 
 import os
-from django.contrib.auth.password_validation import validate_password
- 
+from django.db import transaction
+
 
 class DynamicProfileField(serializers.SlugRelatedField):
     """If the profile does not exist in the database, it will create the profile automatically."""
     def to_internal_value(self, data):
-        if not data:
-            return None
-        profile_name = str(data).strip()
-        profile, _ = Profile.objects.get_or_create(
-            name=profile_name,
-            defaults={'description': f'{profile_name} profile'}
-        )
-        return profile
+      profile_name = str(data).strip()
+      if not profile_name:
+         raise serializers.ValidationError('Profile cannot be blank.')       
+      profile = Profile.objects.filter(name__iexact=profile_name).first()
+      if not profile :
+        profile = Profile.objects.create(name=profile_name)   # is_default=False, delete ho sakta h   ai
+      return profile
 
 class UserSerializer(serializers.ModelSerializer):
     profiles = DynamicProfileField(
@@ -102,10 +101,17 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(UserSerializer):
+    profiles = DynamicProfileField(
+        slug_field='name',
+        queryset=Profile.objects.all(),
+        required=True,
+        allow_null=False,
+        error_messages={'required': 'Profile is required.'}
+    )
     password = serializers.CharField(
-        write_only=True, 
-        required=False,        # No need to send request password 
-        allow_blank=True,    
+        write_only=True,
+        required=False,        # No need to send request password
+        allow_blank=True,
     )
 
     class Meta(UserSerializer.Meta):
@@ -117,17 +123,9 @@ class UserCreateSerializer(UserSerializer):
         dynamic_default_password = f"{prefix}@123"
 
         password = validated_data.pop('password', None) or dynamic_default_password
-    
+
         if not validated_data.get('username'):
             validated_data['username'] = email
-
-        # Default profile assign karna (Requirement 1 ke liye):
-        if not validated_data.get('profiles'):
-            default_profile, _ = Profile.objects.get_or_create(
-                name='Standard', 
-                defaults={'description': 'Default user profile'}
-            )
-            validated_data['profiles'] = default_profile
 
         return User.objects.create_user(password=password, **validated_data)
 
@@ -207,8 +205,8 @@ class ResetPasswordSerializer(serializers.Serializer):
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ['id', 'name', 'description', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'name', 'is_default', 'created_at']
+        read_only_fields = ['id', 'is_default', 'created_at']
         extra_kwargs = {
             'name': {
                 'required': True,
@@ -217,14 +215,26 @@ class ProfileSerializer(serializers.ModelSerializer):
             }
         }
 
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Profile name cannot be blank.')
+        qs = Profile.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Profile with this name already exists.')
+        return value
+
 class ClientSerializer(serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     updated_by = serializers.SerializerMethodField()
     deleted_by = serializers.SerializerMethodField()
+    restored_by = serializers.SerializerMethodField()
     class Meta:
         model = Client
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by']
         # Client-required fields
         extra_kwargs = {
             'first_name': {
@@ -260,10 +270,13 @@ class ClientSerializer(serializers.ModelSerializer):
     def get_deleted_by(self, obj):
         return self._format_user(obj.deleted_by)
 
+    def get_restored_by(self, obj):                   #restore
+        return self._format_user(obj.restored_by)
+
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         # 1. Remove the fields that have null values from the response.
-        for field in ['deleted_at', 'deleted_by', 'updated_by']:
+        for field in ['deleted_at', 'deleted_by', 'updated_by', 'restored_at', 'restored_by']:
             if ret.get(field) is None:
                 ret.pop(field, None)
         
@@ -308,8 +321,22 @@ class ProjectSerializer(serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     updated_by = serializers.SerializerMethodField()
     deleted_by = serializers.SerializerMethodField()
+    restored_by = serializers.SerializerMethodField()
     attachments = serializers.SerializerMethodField()
     attachments_count = serializers.SerializerMethodField()
+
+    uploaded_files = serializers.ListField(
+        child=serializers.FileField(),
+        write_only=True,
+        required=False,
+        allow_empty=True,
+    )
+    remove_attachment_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        allow_empty=True,
+    )
 
     # Here, assign a custom field to the `assigned_manager` field.
     assigned_manager = ManagerRelatedField(
@@ -321,7 +348,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by']
+        read_only_fields = ['id', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by']
         extra_kwargs = {
             'title': {'required': True, 'error_messages': {'required': 'Project title is required.'}},
             'type': {'required': True, 'error_messages': {'required': 'Project type is required.'}},
@@ -353,6 +380,9 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_created_by(self, obj):
         return self._format_user(obj.created_by)
 
+    def get_restored_by(self, obj):
+        return self._format_user(obj.restored_by)
+
     def get_updated_by(self, obj):
         return self._format_user(obj.updated_by)
 
@@ -368,13 +398,52 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_attachments_count(self, obj):        #Attachmnet
         return obj.attachments.count()
 
+    def validate_uploaded_files(self, files):
+        for f in files:
+            validate_single_file(f)
+        return files
+    def _save_files(self, project, files):
+        request = self.context.get('request')
+        user = request.user if request else None
+        for f in files:
+            ProjectAttachment.objects.create(
+                project=project,
+                file=f,
+                file_name=f.name,
+                 
+            )
+
+    @transaction.atomic
+    def create(self, validated_data):
+        files = validated_data.pop('uploaded_files', [])
+        validated_data.pop('remove_attachment_ids', None)
+        project = super().create(validated_data)
+        self._save_files(project, files)
+        return project
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        files = validated_data.pop('uploaded_files', [])
+        remove_ids = validated_data.pop('remove_attachment_ids', [])
+        project = super().update(instance, validated_data)
+
+        for att in project.attachments.filter(id__in=remove_ids):
+            att.file.delete(save=False)
+            att.delete()
+
+        self._save_files(project, files)
+        return project
+
+    
+
+
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         # Format client in response like created_by
         ret['client'] = self._format_client(instance.client)
         ret['assigned_manager'] = self._format_user(instance.assigned_manager)
         # Do not include null audit fields in the response.
-        for field in ['deleted_at', 'deleted_by', 'updated_by']:
+        for field in ['deleted_at', 'deleted_by', 'updated_by', 'restored_at', 'restored_by']:
             if ret.get(field) is None:
                 ret.pop(field, None)
         if not instance.updated_by:
@@ -387,37 +456,27 @@ class ProjectSerializer(serializers.ModelSerializer):
 # ==========================================
 # PROJECT ATTACHMENT SERIALIZER
 # ==========================================
+
+ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx', '.xlsx', '.txt']
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+def validate_single_file(f):
+    if f.size > MAX_FILE_SIZE:
+        raise serializers.ValidationError(f"'{f.name}' exceeds 10MB.")
+    ext = os.path.splitext(f.name)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise serializers.ValidationError(f"File type '{ext}' is not allowed.")
+    return f
+
 class ProjectAttachmentSerializer(serializers.ModelSerializer):
-    uploaded_by = serializers.SerializerMethodField()
+     
 
     class Meta:
         model = ProjectAttachment
-        fields = ['id', 'file', 'file_name', 'uploaded_by', 'uploaded_at']
-        read_only_fields = ['id', 'uploaded_at', 'uploaded_by']
-        extra_kwargs = {
-            'file': {
-                'required': True,
-                'error_messages': {'required': 'Please upload a file.'}
-            }
-        }
+        fields = ['id', 'file', 'file_name', 'uploaded_at']
+        read_only_fields = fields
+        
 
-    def get_uploaded_by(self, obj):
-        if not obj.uploaded_by:
-            return None
-        name = f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip()
-        return {
-            "id": obj.uploaded_by.id,
-            "name": name if name else obj.uploaded_by.username,
-            "email": obj.uploaded_by.email,
-        }
+    
 
-    def validate_file(self, value):
-        max_size = 10 * 1024 * 1024
-        if value.size > max_size:
-            raise serializers.ValidationError("File size must not exceed 10MB.")
-
-        allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx', '.xlsx', '.txt']
-        ext = os.path.splitext(value.name)[1].lower()
-        if ext not in allowed:
-            raise serializers.ValidationError(f"File type '{ext}' is not allowed.")
-        return value
+     

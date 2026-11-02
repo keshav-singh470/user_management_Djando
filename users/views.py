@@ -6,10 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 
-import os
-
-
-from .models import User, Client, Project, Profile, ProjectAttachment
+from .models import User, Client, Project, Profile
 from .serializers import *
 from .utils import create_and_send_otp, send_welcome_email, verify_otp
 
@@ -97,6 +94,8 @@ class UserDetailView(APIView):
             return Response({'message': 'User permanently deleted'}, status=status.HTTP_200_OK)
 
         user.status = 'Inactive'
+        user.deleted_at = timezone.now()
+        user.deleted_by = request.user
         user.is_active = False
         user.save()
         return Response({'message': 'User deactivated successfully (soft delete)'}, status=status.HTTP_200_OK)
@@ -133,6 +132,8 @@ class UserDeactivateView(APIView):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
         user.status = 'Inactive'
+        user.deleted_at = timezone.now()
+        user.deleted_by = request.user
         user.is_active = False
         user.save()
         return Response({'message': f'User {user.email} has been deactivated!'}, status=status.HTTP_200_OK)
@@ -278,8 +279,88 @@ class ProfileDetailView(APIView):
         profile = self.get_object(pk)
         if not profile:
             return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        if profile.is_default:
+            return Response({'error': 'Default profile cannot be deleted'}, status=status.HTTP_403_FORBIDDEN)
         profile.delete()
-        return Response({'message': 'Profile permanently deleted'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Profile deleted. Users using it now have no profile.'}, status=status.HTTP_200_OK)
+
+
+# ==========================================
+# RESTORE VIEWS
+# ==========================================
+
+class ProjectRestoreView(APIView):
+    """POST /api/projects/<id>/restore/ -> Soft-deleted project ko wapas active karna"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            project = Project.objects.get(pk=pk)    # is_active filter nahi, kyunki deleted wala chahiye
+        except Project.DoesNotExist:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        if project.is_active:
+            return Response({'error': 'Project is already active'}, status=status.HTTP_400_BAD_REQUEST)
+
+        project.is_active = True
+        project.deleted_at = None
+        project.deleted_by = None
+        project.restored_at = timezone.now()
+        project.restored_by = request.user
+        project.save()
+        return Response({
+            'message': 'Project restored successfully',
+            'project': ProjectSerializer(project, context={'request': request, 'include_attachments': True}).data
+        }, status=status.HTTP_200_OK)
+
+
+class ClientRestoreView(APIView):
+    """POST /api/clients/<id>/restore/ -> Soft-deleted client ko wapas active karna"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            client = Client.objects.get(pk=pk)
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+        if client.is_active:
+            return Response({'error': 'Client is already active'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client.is_active = True
+        client.deleted_at = None
+        client.deleted_by = None
+        client.restored_at = timezone.now()
+        client.restored_by = request.user
+        client.save()
+        return Response({
+            'message': 'Client restored successfully',
+            'client': ClientSerializer(client).data
+        }, status=status.HTTP_200_OK)
+
+
+class UserRestoreView(APIView):
+    """POST /api/users/<id>/restore/ -> Soft-deleted user ko wapas active karna"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if user.is_active and user.status == 'Active':
+            return Response({'error': 'User is already active'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.is_active = True
+        user.status = 'Active'
+        user.deleted_at = None
+        user.deleted_by = None
+        user.restored_at = timezone.now()
+        user.restored_by = request.user
+        user.save()
+        return Response({
+            'message': f'User {user.email} restored successfully',
+            'user': UserSerializer(user).data
+        }, status=status.HTTP_200_OK)
+
 
 # ==========================================
 # CLIENT VIEWS (APIView)
@@ -426,12 +507,13 @@ class ProjectListCreateView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
-        serializer = ProjectSerializer(data=request.data)
+        serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        # Login user ko created_by assign karein:
         project = serializer.save(created_by=request.user)
-        return Response(ProjectSerializer(project, context={'request': request}).data, status=status.HTTP_201_CREATED)
-
+        return Response(
+            ProjectSerializer(project, context={'request': request, 'include_attachments': True}).data,
+            status=status.HTTP_201_CREATED
+        )
 
 class ProjectDetailView(APIView):
     """
@@ -461,11 +543,12 @@ class ProjectDetailView(APIView):
         project = self.get_object(pk)
         if not project:
             return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
-        serializer = ProjectSerializer(project, data=request.data, partial=True)
+        serializer = ProjectSerializer(project, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        # Login user ko updated_by assign karein:
-        serializer.save(updated_by=request.user)
-        return Response(serializer.data)
+        project = serializer.save(updated_by=request.user)
+        return Response(
+            ProjectSerializer(project, context={'request': request, 'include_attachments': True}).data
+        )
 
     def put(self, request, pk):
         return self.patch(request, pk)
@@ -487,66 +570,3 @@ class ProjectDetailView(APIView):
         project.save()
         return Response({'message': 'Project soft-deleted successfully'}, status=status.HTTP_200_OK)
 
-
-# ==========================================
-# PROJECT ATTACHMENT 
-# ==========================================
-
-class ProjectAttachmentView(APIView):
-    """
-    GET    /api/projects/<id>/attachments/        -> List all attachments of a project
-    POST   /api/projects/<id>/attachments/        -> Upload new attachment
-    DELETE /api/projects/<id>/attachments/<att_id>/ -> Delete an attachment
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get_project(self, pk):
-        try:
-            return Project.objects.get(pk=pk, is_active=True)
-        except Project.DoesNotExist:
-            return None
-
-    def get(self, request, pk):
-        project = self.get_project(pk)
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        attachments = project.attachments.all()
-        serializer = ProjectAttachmentSerializer(attachments, many=True, context={'request': request})
-        return Response(serializer.data)
-
-    def post(self, request, pk):
-        project = self.get_project(pk)
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = ProjectAttachmentSerializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-
-        # file_name auto-set from uploaded file if not provided
-        file = serializer.validated_data['file']
-        file_name = serializer.validated_data.get('file_name') or file.name
-
-        attachment = serializer.save(
-            project=project,
-            uploaded_by=request.user,
-            file_name=file_name
-        )
-        return Response(ProjectAttachmentSerializer(attachment, context={'request': request}).data, status=status.HTTP_201_CREATED)
-
-
-class ProjectAttachmentDeleteView(APIView):
-    """
-    DELETE /api/projects/<id>/attachments/<att_id>/ -> Delete specific attachment
-    """
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, pk, att_id):
-        try:
-            attachment = ProjectAttachment.objects.get(pk=att_id, project_id=pk)
-        except ProjectAttachment.DoesNotExist:
-            return Response({'error': 'Attachment not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        attachment.file.delete(save=False)  # disk se bhi file delete hogi
-        attachment.delete()
-        return Response({'message': 'Attachment deleted successfully'}, status=status.HTTP_200_OK)

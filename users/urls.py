@@ -29,7 +29,8 @@ urlpatterns = [
     path('projects/', views.ProjectListCreateView.as_view()),            
     path('projects/<int:pk>/', views.ProjectDetailView.as_view()),
 
-    # Project Attachment endpoints
-    path('projects/<int:pk>/attachments/', views.ProjectAttachmentView.as_view()),
-    path('projects/<int:pk>/attachments/<int:att_id>/', views.ProjectAttachmentDeleteView.as_view()),
+    path('users/<int:pk>/restore/', views.UserRestoreView.as_view()),
+    path('clients/<int:pk>/restore/', views.ClientRestoreView.as_view()),
+    path('projects/<int:pk>/restore/', views.ProjectRestoreView.as_view()),
+     
 ]
