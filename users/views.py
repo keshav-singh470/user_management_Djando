@@ -5,11 +5,22 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
+from django.db.models import Q
 
 from .models import User, Client, Project, Profile
 from .serializers import *
-from .utils import create_and_send_otp, send_welcome_email, verify_otp
+from .utils import create_and_send_otp, send_welcome_email, verify_otp, send_project_created_emails
 
+def apply_search(queryset, search, fields):
+    """'john sharma' jaise multi-word search ko har word par fields mein dhundhta hai."""
+    if not search:
+        return queryset
+    for term in search.split():
+        q = Q()
+        for field in fields:
+            q |= Q(**{f'{field}__icontains': term})
+        queryset = queryset.filter(q)
+    return queryset
 
 # ==========================================
 # USER VIEWS (APIView)
@@ -35,6 +46,15 @@ class UserListCreateView(APIView):
             users = User.objects.all().order_by('-id')
         else:
             users = User.objects.filter(status='Active').order_by('-id')
+
+        users = apply_search(users, request.query_params.get('search'),
+                             ['first_name', 'last_name', 'email', 'username', 'phone'])
+        profile = request.query_params.get('profile')
+        if profile:
+            users = users.filter(profiles__name__iexact=profile)
+        nationality = request.query_params.get('nationality')
+        if nationality:
+            users = users.filter(nationality__iexact=nationality)
  
         paginator = PageNumberPagination()
         paginator.page_size = 10
@@ -78,7 +98,7 @@ class UserDetailView(APIView):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = UserSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(modified_by=request.user)
         return Response(serializer.data)
 
     def put(self, request, pk):
@@ -112,6 +132,9 @@ class UserActivateView(APIView):
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if user.is_active and user.status == 'Active':
+            return Response({'error': f'User {user.email} is already active'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         user.status = 'Active'
         user.is_active = True
@@ -130,6 +153,9 @@ class UserDeactivateView(APIView):
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not user.is_active and user.status == 'Inactive':
+            return Response({'error': f'User {user.email} is already inactive'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         user.status = 'Inactive'
         user.deleted_at = timezone.now()
@@ -267,6 +293,8 @@ class ProfileDetailView(APIView):
         profile = self.get_object(pk)
         if not profile:
             return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        if profile.is_default:
+            return Response({'error': 'Default profile cannot be updated'}, status=status.HTTP_403_FORBIDDEN)
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -353,8 +381,7 @@ class UserRestoreView(APIView):
         user.status = 'Active'
         user.deleted_at = None
         user.deleted_by = None
-        user.restored_at = timezone.now()
-        user.restored_by = request.user
+        user.modified_by = request.user
         user.save()
         return Response({
             'message': f'User {user.email} restored successfully',
@@ -382,6 +409,12 @@ class ClientListCreateView(APIView):
             clients = Client.objects.filter(is_active=False).order_by('-id')
         else:
             clients = Client.objects.filter(is_active=True).order_by('-id')
+
+        clients = apply_search(clients, request.query_params.get('search'),
+                               ['first_name', 'last_name', 'email_id', 'contact_no', 'countries'])
+        country = request.query_params.get('country')
+        if country:
+            clients = clients.filter(countries__iexact=country)
 
         paginator = PageNumberPagination()
         paginator.page_size = 10
@@ -457,6 +490,9 @@ class ClientActivateView(APIView):
             client = Client.objects.get(pk=pk)
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+        if client.is_active:
+            return Response({'error': f'Client {client.first_name} is already active'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         client.is_active = True
         client.save()
@@ -474,6 +510,9 @@ class ClientDeactivateView(APIView):
             client = Client.objects.get(pk=pk)
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not client.is_active:
+            return Response({'error': f'Client {client.first_name} is already inactive'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         client.is_active = False
         client.save()
@@ -500,6 +539,16 @@ class ProjectListCreateView(APIView):
         else:
             projects = Project.objects.filter(is_active=True).prefetch_related('attachments').order_by('-id')
 
+        projects = apply_search(projects, request.query_params.get('search'),
+                                ['title', 'type', 'description', 'client__first_name', 'client__last_name',
+                                 'assigned_manager__first_name', 'assigned_manager__last_name'])
+        for param, lookup in [('status', 'status__iexact'), ('type', 'type__iexact'),
+                              ('client', 'client_id'), ('manager', 'assigned_manager_id')]:
+            value = request.query_params.get(param)
+            if value:
+                if param in ('client', 'manager') and not value.isdigit():
+                    continue
+                projects = projects.filter(**{lookup: value})
         paginator = PageNumberPagination()
         paginator.page_size = 10
         page = paginator.paginate_queryset(projects, request)
@@ -510,6 +559,7 @@ class ProjectListCreateView(APIView):
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         project = serializer.save(created_by=request.user)
+        send_project_created_emails(project)
         return Response(
             ProjectSerializer(project, context={'request': request, 'include_attachments': True}).data,
             status=status.HTTP_201_CREATED

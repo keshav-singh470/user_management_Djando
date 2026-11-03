@@ -2,7 +2,7 @@
   "info": {
     "name": "User Management APIs",
     "_postman_id": "um-complete-suite-2026",
-    "description": "End-to-end API collection: Auth, Users, Profiles (default + custom), Clients, Projects (with attachments inside the Project API) and Restore APIs, with positive and negative cases.",
+    "description": "End-to-end API collection: Auth, Users, Profiles (6 default protected + custom), Clients, Projects (attachments inside the Project API, Manager-only assignment, creation emails), Search/Filters and Restore APIs, with positive and negative cases. For file rows: click Select Files and pick a real file before sending.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -324,6 +324,24 @@
           }
         },
         {
+          "name": "Create User - Default Profile 'Manager' (Success)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Vishal\",\n  \"last_name\": \"Panchal\",\n  \"email\": \"manager.test@example.com\",\n  \"profiles\": \"manager\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Profile name is case-insensitive ('manager' -> 'Manager'). Use this user as assigned_manager in a project."
+          }
+        },
+        {
           "name": "Create User - Missing Profile (400)",
           "request": {
             "method": "POST",
@@ -571,11 +589,195 @@
           }
         },
         {
+          "name": "Search Users (?search=rahul)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users/?search=rahul",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "rahul"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Searches name / email / phone etc. Multi-word search works too, e.g. 'rahul sharma'."
+          }
+        },
+        {
+          "name": "Search Users - Full Name (?search=rahul sharma)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users/?search=rahul sharma",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "rahul sharma"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Users by Profile (?profile=Developer)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users/?profile=Developer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "profile",
+                  "value": "Developer"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Users by Country (?country=India)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users/?country=India",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "India"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Search + Filter Users (?search=rahul&profile=Developer)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users/?search=rahul&profile=Developer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "rahul"
+                },
+                {
+                  "key": "profile",
+                  "value": "Developer"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Search Users - No Match (empty results)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/users/?search=zzzzznomatch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "zzzzznomatch"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
           "name": "List Users - Unauthorized (401)",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/users/"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
@@ -593,8 +795,19 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Check is_default: true for the 5 default profiles."
-          }
+            "description": "Check is_default: true for the 6 default profiles: Super Admin, Admin, Manager, Team Leader, Developer, Human Resource."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Profile (POST)",
@@ -747,8 +960,41 @@
                 "value": "application/json"
               }
             ],
-            "description": "Change the id to one of YOUR custom profiles."
+            "description": "Change the id to one of YOUR custom profiles (non-default). Default profiles return 403."
           }
+        },
+        {
+          "name": "Update Default Profile (PATCH - Expect 403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/profiles/1/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Renamed Profile\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Use the id of a default profile (Super Admin / Admin / Manager / Team Leader / Developer / Human Resource). Default profiles cannot be edited. Expect 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Delete Default Profile (Expect 403)",
@@ -761,8 +1007,51 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Use the id of a default profile (Admin / Human Resource / Manager / Developer / Standard). Expect 403."
-          }
+            "description": "Use the id of a default profile (Super Admin / Admin / Manager / Team Leader / Developer / Human Resource). Expect 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Profile - Duplicate of Default 'human resource' (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/profiles/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"human resource\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Delete Custom Profile (Hard Delete - 200)",
@@ -841,6 +1130,94 @@
                 {
                   "key": "all",
                   "value": "true"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Search Clients (?search=amar)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/clients/?search=amar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clients",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "amar"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Clients by Country (?country=India)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/clients/?country=India",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clients",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "India"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Search + Filter Clients (?search=amar&country=India)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/clients/?search=amar&country=India",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "clients",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "amar"
+                },
+                {
+                  "key": "country",
+                  "value": "India"
                 }
               ]
             },
@@ -1146,7 +1523,179 @@
           }
         },
         {
-          "name": "Create Project (JSON - no files)",
+          "name": "Search Projects (?search=erp)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?search=erp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "erp"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Projects by Status (?status=Pending)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?status=Pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Projects by Type (?type=Web App)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?type=Web App",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "Web App"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Projects by Client (?client=7)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?client=7",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "client",
+                  "value": "7"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Projects by Manager (?manager=24)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?manager=24",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "manager",
+                  "value": "24"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Search + Filter Projects (?search=erp&status=Pending)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?search=erp&status=Pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "erp"
+                },
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Create Project (JSON - Manager assigned, 2 emails sent)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/",
@@ -1164,8 +1713,84 @@
                 "value": "application/json"
               }
             ],
-            "description": "JSON cannot carry files. Use the form-data request below to upload files."
-          }
+            "description": "assigned_manager (24) must be a user with the 'Manager' profile. Expect 201 and one email to the client and one to the manager. JSON cannot carry files; use the form-data request below for files."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project - Assigned Manager is Developer (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Role Check Project\",\n  \"type\": \"Web App\",\n  \"client\": 7,\n  \"assigned_manager\": 26\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Change 26 to the id of a user whose profile is NOT 'Manager' (e.g. Developer). Expect 400: only users with the Manager profile can be assigned."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project - Assigned Manager Not Found (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Role Check Project\",\n  \"type\": \"Web App\",\n  \"client\": 7,\n  \"assigned_manager\": 99999\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Project - Missing Title (400)",
@@ -1186,7 +1811,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Project - Missing Type (400)",
@@ -1207,7 +1843,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Project With Attachments (form-data)",
@@ -1255,13 +1902,13 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": [],
+                  "src": null,
                   "description": "First file (pdf/png/jpg/jpeg/doc/docx/xlsx/txt, max 10MB)"
                 },
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": [],
+                  "src": null,
                   "description": "Second file (same key repeated)"
                 }
               ]
@@ -1272,7 +1919,7 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Do NOT add a Content-Type header manually. Key must be exactly 'uploaded_files'."
+            "description": "Click 'Select Files' on each uploaded_files row and choose a real file (not a folder). Do NOT add a Content-Type header manually. Key must be exactly 'uploaded_files'. assigned_manager must have the Manager profile."
           }
         },
         {
@@ -1296,7 +1943,7 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": [],
+                  "src": null,
                   "description": "Select a .exe or .zip file"
                 }
               ]
@@ -1355,7 +2002,7 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": [],
+                  "src": null,
                   "description": "New file to add (existing files stay)"
                 }
               ]
@@ -1408,7 +2055,7 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": [],
+                  "src": null,
                   "description": "New file that replaces the removed one"
                 }
               ]

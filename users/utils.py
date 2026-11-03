@@ -1,11 +1,11 @@
 import secrets
-
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.cache import cache
 from django.core.mail import send_mail
 from rest_framework import serializers
-
+import logging
+logger = logging.getLogger(__name__)
 OTP_MAX_REQUESTS = 3
 OTP_WINDOW_SECONDS = 12 * 60 * 60  # 12 hours = 43200 seconds
 
@@ -76,3 +76,54 @@ def verify_otp(user, code, purpose):
         return False
     cache.delete(key)   # OTP is deleted after it is used once
     return True
+
+def _full_name(user):
+    name = f"{user.first_name} {user.last_name}".strip()
+    return name or user.username
+
+
+def _send_project_mail(subject, body, to_email):
+    try:
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+    except Exception:
+        # Project ban chuka hai, isliye mail fail hone par API ko error mat do
+        logger.exception("Could not send project email to %s", to_email)
+
+
+def send_project_created_emails(project):
+    manager = project.assigned_manager
+    client = project.client
+    base = (
+        f"Project     : {project.title}\n"
+        f"Status      : {project.status}\n"
+        f"Description : {project.description or '-'}\n"
+    )
+
+    # 1) Client ko mail (project details + manager ki jaankari)
+    if client and client.email_id:
+        if manager:
+            manager_info = f"Manager     : {_full_name(manager)} ({manager.email}, {manager.phone or '-'})\n"
+        else:
+            manager_info = "Manager     : Not assigned yet\n"
+        _send_project_mail(
+            f"New project created: {project.title}",
+            f"Hello {client.first_name or 'Client'},\n\nA new project has been created for you.\n\n"
+            f"{base}{manager_info}\nRegards,\nTeam",
+            client.email_id,
+        )
+
+    # 2) Manager ko mail (project details + client ki jaankari)
+    if manager and manager.email:
+        if client:
+            client_info = (
+                f"Client      : {client.first_name or ''} {client.last_name or ''}".strip()
+                + f" ({client.email_id or '-'}, {client.contact_no or '-'})\n"
+            )
+        else:
+            client_info = "Client      : Not assigned\n"
+        _send_project_mail(
+            f"You are assigned to project: {project.title}",
+            f"Hello {_full_name(manager)},\n\nYou have been assigned a new project.\n\n"
+            f"{base}{client_info}\nRegards,\nTeam",
+            manager.email,
+        )

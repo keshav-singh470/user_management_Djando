@@ -56,6 +56,21 @@ class UserSerializer(serializers.ModelSerializer):
                  
             },
         }
+   
+    def validate_email(self, value):       #Duplicate email check
+        value = value.strip()
+        qs = User.objects.filter(email__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        profile = instance.profiles
+        ret['profiles'] = {"id": profile.id, "name": profile.name} if profile else None
+        return ret
 
     def to_internal_value(self, data):
         # 1. We create a copy of the request data so that we can modify it without affecting the original data
@@ -116,6 +131,16 @@ class UserCreateSerializer(UserSerializer):
 
     class Meta(UserSerializer.Meta):
         fields = UserSerializer.Meta.fields + ['password']
+
+    def validate(self, attrs):                       #username (ya email se banne wala username) duplicate to nahi
+        email = attrs.get('email', '')
+        username = attrs.get('username') or email
+        if User.objects.filter(username__iexact=username).exists():
+            field = 'username' if attrs.get('username') else 'email'
+            raise serializers.ValidationError(
+                {field: "A user with this username already exists."}
+            )
+        return attrs
 
     def create(self, validated_data):
         email = validated_data.get('email', '')
@@ -234,7 +259,7 @@ class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by', 'is_active']
         # Client-required fields
         extra_kwargs = {
             'first_name': {
@@ -290,29 +315,36 @@ class ClientSerializer(serializers.ModelSerializer):
 # Project Serializer
 
 class ManagerRelatedField(serializers.PrimaryKeyRelatedField):
-    """
-This field can accept an ID (24), email (`admin@gmail.com`), 
-username (`admin`), or name (`Keshav`).
-    """
+    """Accepts only a unique value: user ID (24) or email (manager@example.com)."""
     def to_internal_value(self, data):
-        # 1. If the ID is a number, such as integer `24` or string `"24"`.
         if isinstance(data, int) or (isinstance(data, str) and data.isdigit()):
             try:
                 return self.get_queryset().get(pk=int(data))
             except User.DoesNotExist:
                 raise serializers.ValidationError(f"User with ID {data} does not exist.")
 
-        # 2.If it is a string, such as an email, username, or name.
         if isinstance(data, str):
-            user = self.get_queryset().filter(
-                Q(email__iexact=data) | 
-                Q(username__iexact=data) | 
-                Q(first_name__iexact=data)
-            ).first()
-
+            user = self.get_queryset().filter(email__iexact=data.strip()).first()
             if user:
                 return user
-            raise serializers.ValidationError(f"No manager found with email, username, or name '{data}'.")
+            raise serializers.ValidationError(f"No user found with email '{data}'.")
+
+        self.fail('incorrect_type', data_type=type(data).__name__)
+
+class ClientRelatedField(serializers.PrimaryKeyRelatedField):         
+    """Accepts only a unique value: client ID (7) or client email (client@example.com)."""
+    def to_internal_value(self, data):
+        if isinstance(data, int) or (isinstance(data, str) and data.isdigit()):
+            try:
+                return self.get_queryset().get(pk=int(data))
+            except Client.DoesNotExist:
+                raise serializers.ValidationError(f"Client with ID {data} does not exist.")
+
+        if isinstance(data, str):
+            client = self.get_queryset().filter(email_id__iexact=data.strip()).first()
+            if client:
+                return client
+            raise serializers.ValidationError(f"No client found with email '{data}'.")
 
         self.fail('incorrect_type', data_type=type(data).__name__)
 
@@ -342,6 +374,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     assigned_manager = ManagerRelatedField(
         queryset=User.objects.all(), 
         required=False, 
+        allow_null=True
+    )
+    client = ClientRelatedField(
+        queryset=Client.objects.filter(is_active=True),
+        required=False,
         allow_null=True
     )
 
@@ -402,6 +439,20 @@ class ProjectSerializer(serializers.ModelSerializer):
         for f in files:
             validate_single_file(f)
         return files
+
+    def validate_assigned_manager(self, user):
+        if user is None:
+            return user
+        role = user.profiles.name if user.profiles else None
+        if role != 'Manager':
+            raise serializers.ValidationError(
+                "Only a user with the 'Manager' profile can be assigned to a project."
+            )
+        if not user.is_active or user.status != 'Active':
+            raise serializers.ValidationError("Assigned manager must be an active user.")
+        return user
+
+
     def _save_files(self, project, files):
         request = self.context.get('request')
         user = request.user if request else None

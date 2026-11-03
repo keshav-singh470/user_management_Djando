@@ -32,6 +32,9 @@ class User(AbstractUser):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Active')
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_users')
+    modified_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    modified_by = models.ForeignKey('self', null=True, blank=True,
+                                on_delete=models.SET_NULL, related_name='modified_users')
     restored_at = models.DateTimeField(null=True, blank=True)
     restored_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='restored_users')
 
