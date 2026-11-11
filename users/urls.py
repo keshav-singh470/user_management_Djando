@@ -32,5 +32,13 @@ urlpatterns = [
     path('users/<int:pk>/restore/', views.UserRestoreView.as_view()),
     path('clients/<int:pk>/restore/', views.ClientRestoreView.as_view()),
     path('projects/<int:pk>/restore/', views.ProjectRestoreView.as_view()),
+
+    # Task endpoints
+    path('tasks/', views.TaskListView.as_view()),
+    path('projects/<int:project_id>/tasks/', views.ProjectTaskListCreateView.as_view()),
+    path('tasks/<int:pk>/', views.ProjectTaskDetailView.as_view()),
+    path('tasks/<int:task_id>/comments/', views.TaskCommentListCreateView.as_view()),
+    path('comments/<int:pk>/', views.TaskCommentDetailView.as_view()),
+    path('tasks/<int:pk>/activate/', views.ProjectTaskActivateView.as_view()),
      
 ]

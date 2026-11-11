@@ -7,9 +7,11 @@ from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from django.db.models import Q
 
-from .models import User, Client, Project, Profile
+from .models import User, Client, Project, Profile, ProjectTask, TaskComment
 from .serializers import *
 from .utils import create_and_send_otp, send_welcome_email, verify_otp, send_project_created_emails
+from .permissions import (UserWritePermission, ProfileWritePermission,
+                          ClientWritePermission, ProjectWritePermission, role_of)
 
 def apply_search(queryset, search, fields):
     """'john sharma' jaise multi-word search ko har word par fields mein dhundhta hai."""
@@ -33,10 +35,7 @@ class UserListCreateView(APIView):
     GET  /api/users/?status=all      -> All users list
     POST /api/users/           -> Register/Create new user
     """
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            return [AllowAny()]
-        return [IsAuthenticated()]
+    permission_classes = [UserWritePermission]
 
     def get(self, request):
         status_param = request.query_params.get('status')
@@ -78,7 +77,7 @@ class UserDetailView(APIView):
     DELETE /api/users/<id>/ -> Soft delete user (status = Inactive)
     DELETE /api/users/<id>/?hard=true -> Permanent delete
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [UserWritePermission]
 
     def get_object(self, pk):
         try:
@@ -125,7 +124,7 @@ class UserActivateView(APIView):
     """
     POST /api/users/<id>/activate/ -> Inactive user ko wapas Active banana
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [UserWritePermission]
 
     def post(self, request, pk):
         try:
@@ -146,7 +145,7 @@ class UserDeactivateView(APIView):
     """
     POST /api/users/<id>/deactivate/ -> Change the user’s status to inactive
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [UserWritePermission]
 
     def post(self, request, pk):
         try:
@@ -254,7 +253,7 @@ class ProfileListCreateView(APIView):
     GET  /api/profiles/  -> List all profiles
     POST /api/profiles/  -> Create new profile
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProfileWritePermission]
 
     def get(self, request):
         profiles = Profile.objects.all().order_by('name')
@@ -275,7 +274,7 @@ class ProfileDetailView(APIView):
     PUT    /api/profiles/<id>/ -> Full update
     DELETE /api/profiles/<id>/ -> Hard delete
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProfileWritePermission]
 
     def get_object(self, pk):
         try:
@@ -319,7 +318,7 @@ class ProfileDetailView(APIView):
 
 class ProjectRestoreView(APIView):
     """POST /api/projects/<id>/restore/ -> Soft-deleted project ko wapas active karna"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectWritePermission]
 
     def post(self, request, pk):
         try:
@@ -343,7 +342,7 @@ class ProjectRestoreView(APIView):
 
 class ClientRestoreView(APIView):
     """POST /api/clients/<id>/restore/ -> Soft-deleted client ko wapas active karna"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ClientWritePermission]
 
     def post(self, request, pk):
         try:
@@ -366,10 +365,10 @@ class ClientRestoreView(APIView):
 
 
 class UserRestoreView(APIView):
-    """POST /api/users/<id>/restore/ -> Soft-deleted user ko wapas active karna"""
-    permission_classes = [IsAuthenticated]
+    """PUT /api/users/<id>/restore/. -> Soft-deleted user ko wapas active karna"""
+    permission_classes = [UserWritePermission]
 
-    def post(self, request, pk):
+    def put(self, request, pk):
         try:
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
@@ -400,7 +399,7 @@ class ClientListCreateView(APIView):
     GET  /api/clients/?all=true     -> All clients list
     POST /api/clients/              -> Create new client
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ClientWritePermission]
 
     def get(self, request):
         if request.query_params.get('all') == 'true':
@@ -437,7 +436,7 @@ class ClientDetailView(APIView):
     DELETE /api/clients/<id>/ -> Soft delete client (is_active = False)
     DELETE /api/clients/<id>/?hard=true -> Permanent delete
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ClientWritePermission]
 
     def get_object(self, pk):
         try:
@@ -483,7 +482,7 @@ class ClientActivateView(APIView):
     """
     POST /api/clients/<id>/activate/ ->  Make an inactive client active again
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ClientWritePermission]
 
     def post(self, request, pk):
         try:
@@ -503,7 +502,7 @@ class ClientDeactivateView(APIView):
     """
     POST /api/clients/<id>/deactivate/ -> Client ko Inactive karna
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ClientWritePermission]
 
     def post(self, request, pk):
         try:
@@ -529,7 +528,7 @@ class ProjectListCreateView(APIView):
     GET  /api/projects/?all=true    -> All projects
     POST /api/projects/             -> Create new project (Authenticated)
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectWritePermission]
 
     def get(self, request):
         if request.query_params.get('all') == 'true':
@@ -549,6 +548,15 @@ class ProjectListCreateView(APIView):
                 if param in ('client', 'manager') and not value.isdigit():
                     continue
                 projects = projects.filter(**{lookup: value})
+        has_tasks = request.query_params.get('has_tasks')         # How many tasks are there in projects
+        if has_tasks == 'true':
+            projects = projects.filter(tasks__is_active=True).distinct()
+        elif has_tasks == 'false':
+            projects = projects.exclude(tasks__is_active=True)
+        task_user = request.query_params.get('task_assigned_to')    # Which user has how many tasks in projects
+        if task_user and task_user.isdigit():
+            projects = projects.filter(tasks__assigned_to_id=task_user, tasks__is_active=True).distinct()
+        
         paginator = PageNumberPagination()
         paginator.page_size = 10
         page = paginator.paginate_queryset(projects, request)
@@ -573,7 +581,7 @@ class ProjectDetailView(APIView):
     DELETE /api/projects/<id>/ -> Soft delete (is_active = False)
     DELETE /api/projects/<id>/?hard=true -> Permanent delete
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectWritePermission]
 
     def get_object(self, pk):
         try:
@@ -620,3 +628,280 @@ class ProjectDetailView(APIView):
         project.save()
         return Response({'message': 'Project soft-deleted successfully'}, status=status.HTTP_200_OK)
 
+
+# ==========================================
+# PROJECT TASK VIEWS
+# ==========================================
+
+TASK_MANAGER_ROLES = ('Manager', 'Team Leader')
+COMMENT_ROLES = ('Manager', 'Team Leader', 'Developer')
+
+
+def can_manage_tasks(user):
+    return role_of(user) in TASK_MANAGER_ROLES
+
+
+def can_comment(user):
+    return role_of(user) in COMMENT_ROLES
+
+
+
+
+class ProjectTaskListCreateView(APIView):
+    """
+    GET  /api/projects/<project_id>/tasks/  -> Tasks of a project (?search=, ?status=, ?assigned_to=, ?is_active=false, ?all=true)
+    POST /api/projects/<project_id>/tasks/  -> Create task (Manager / Team Leader only)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_project(self, project_id):
+        return Project.objects.filter(pk=project_id, is_active=True).first()
+
+    def get(self, request, project_id):
+        project = self.get_project(project_id)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        tasks = ProjectTask.objects.filter(project=project).select_related('project', 'assigned_to').order_by('-id')
+        if request.query_params.get('all') == 'true':
+            pass
+        elif request.query_params.get('is_active') == 'false':
+            tasks = tasks.filter(is_active=False)
+        else:
+            tasks = tasks.filter(is_active=True)
+
+        tasks = apply_search(tasks, request.query_params.get('search'),
+                             ['title', 'description', 'assigned_to__first_name', 'assigned_to__last_name'])
+        status_value = request.query_params.get('status')
+        if status_value:
+            tasks = tasks.filter(status__iexact=status_value)
+        priority = request.query_params.get('priority')
+        if priority:
+            tasks = tasks.filter(priority__iexact=priority)
+        assigned = request.query_params.get('assigned_to')
+        if assigned and assigned.isdigit():
+            tasks = tasks.filter(assigned_to_id=assigned)
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        page = paginator.paginate_queryset(tasks, request)
+        serializer = ProjectTaskSerializer(page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+    def post(self, request, project_id):
+        if not can_manage_tasks(request.user):
+            return Response({'error': "Only a user with the 'Manager' or 'Team Leader' profile can create a project task."},
+                            status=status.HTTP_403_FORBIDDEN)
+        project = self.get_project(project_id)
+        if not project:
+            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProjectTaskSerializer(data=request.data, context={'request': request, 'project': project})
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save(project=project, created_by=request.user)
+        return Response(
+            ProjectTaskSerializer(task, context={'request': request, 'include_comments': True}).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class TaskListView(APIView):
+    """
+    GET /api/tasks/ -> Tasks of all projects
+        ?assigned_to=<id> or ?assigned_to=me, ?status=, ?priority=, ?project=<id>, ?search=, ?is_active=false, ?all=true
+    Super Admin / Admin / Manager / Team Leader see all tasks. Other users see only their own tasks.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        tasks = ProjectTask.objects.select_related('project', 'assigned_to').order_by('-id')
+        if request.query_params.get('all') == 'true':
+            pass
+        elif request.query_params.get('is_active') == 'false':
+            tasks = tasks.filter(is_active=False)
+        else:
+            tasks = tasks.filter(is_active=True)
+
+        sees_all = request.user.is_superuser or role_of(request.user) in ('Super Admin', 'Admin', 'Manager', 'Team Leader')
+        if sees_all:
+            assigned = request.query_params.get('assigned_to')
+            if assigned == 'me':
+                assigned = str(request.user.id)
+            if assigned and assigned.isdigit():
+                tasks = tasks.filter(assigned_to_id=assigned)
+        else:
+            tasks = tasks.filter(assigned_to=request.user)
+
+        tasks = apply_search(tasks, request.query_params.get('search'),
+                             ['title', 'description', 'project__title'])
+        for param, lookup in [('status', 'status__iexact'), ('priority', 'priority__iexact'), ('project', 'project_id')]:
+            value = request.query_params.get(param)
+            if value and not (param == 'project' and not value.isdigit()):
+                tasks = tasks.filter(**{lookup: value})
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        page = paginator.paginate_queryset(tasks, request)
+        return paginator.get_paginated_response(
+            ProjectTaskSerializer(page, many=True, context={'request': request}).data)
+
+
+class ProjectTaskDetailView(APIView):
+    """
+    GET    /api/tasks/<id>/ -> Task with its comments
+    PATCH  /api/tasks/<id>/ -> Update (Manager/Team Leader: all fields, assigned user: status only)
+    DELETE /api/tasks/<id>/ -> Soft delete (Manager / Team Leader only)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        return ProjectTask.objects.filter(pk=pk, is_active=True).select_related('project', 'assigned_to').first()
+
+    def get(self, request, pk):
+        task = self.get_object(pk)
+        if not task:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ProjectTaskSerializer(task, context={'request': request, 'include_comments': True}).data)
+
+    def patch(self, request, pk):
+        task = self.get_object(pk)
+        if not task:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_assignee = task.assigned_to_id == request.user.id
+        is_manager = can_manage_tasks(request.user)
+        if not (is_assignee or is_manager):
+            return Response({'error': 'You are not allowed to update this task.'}, status=status.HTTP_403_FORBIDDEN)
+        if 'status' in request.data and not is_assignee:
+            return Response({'error': 'Only the user assigned to this task can update its status.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        if not is_manager and set(request.data.keys()) - {'status'}:
+            return Response({'error': 'You can only update the status of your task.'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = ProjectTaskSerializer(task, data=request.data, partial=True, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save(updated_by=request.user)
+        return Response(ProjectTaskSerializer(task, context={'request': request, 'include_comments': True}).data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        task = self.get_object(pk)
+        if not task:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not can_manage_tasks(request.user):
+            return Response({'error': "Only a user with the 'Manager' or 'Team Leader' profile can delete a project task."},
+                            status=status.HTTP_403_FORBIDDEN)
+        task.is_active = False
+        task.updated_by = request.user
+        task.save()
+        return Response({'message': 'Task soft-deleted successfully'}, status=status.HTTP_200_OK)
+
+class ProjectTaskActivateView(APIView):
+    """PUT /api/tasks/<id>/activate/ -> Soft-deleted task ko wapas active karna (Manager / Team Leader only)"""
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, pk):
+        if not can_manage_tasks(request.user):
+            return Response({'error': "Only a user with the 'Manager' or 'Team Leader' profile can activate a project task."},
+                            status=status.HTTP_403_FORBIDDEN)
+        task = ProjectTask.objects.filter(pk=pk).select_related('project', 'assigned_to').first()
+        if not task:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        if task.is_active:
+            return Response({'error': 'Task is already active'}, status=status.HTTP_400_BAD_REQUEST)
+        if not task.project.is_active:
+            return Response({'error': 'The project of this task is not active'}, status=status.HTTP_400_BAD_REQUEST)
+        if ProjectTask.objects.filter(project=task.project, title__iexact=task.title, is_active=True).exists():
+            return Response({'error': 'A task with this title already exists in this project.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        task.is_active = True
+        task.updated_by = request.user
+        task.save()
+        return Response({
+            'message': 'Task activated successfully',
+            'task': ProjectTaskSerializer(task, context={'request': request, 'include_comments': True}).data
+        }, status=status.HTTP_200_OK)
+
+        
+# ==========================================
+# TASK COMMENT VIEWS
+# ==========================================
+
+class TaskCommentListCreateView(APIView):
+    """
+    GET  /api/tasks/<task_id>/comments/ -> Comments of a task
+    POST /api/tasks/<task_id>/comments/ -> Add comment ((Manager / Team Leader / Developer))
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_task(self, task_id):
+        return ProjectTask.objects.filter(pk=task_id, is_active=True).first()
+
+    def get(self, request, task_id):
+        task = self.get_task(task_id)
+        if not task:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        comments = task.comments.filter(is_active=True).select_related('user').order_by('-created_at')
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        page = paginator.paginate_queryset(comments, request)
+        return paginator.get_paginated_response(TaskCommentSerializer(page, many=True).data)
+
+    def post(self, request, task_id):
+        task = self.get_task(task_id)
+        if not task:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        # 'Only Manager, Team Leader and Developer can comment.
+        if not can_comment(request.user):
+            return Response({'error': 'You are not allowed to comment on this task.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = TaskCommentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        comment = serializer.save(task=task, user=request.user)
+        return Response(TaskCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+
+class TaskCommentDetailView(APIView):
+    """
+    GET    /api/comments/<id>/ -> Single comment
+    PATCH  /api/comments/<id>/ -> Edit (only the author)
+    DELETE /api/comments/<id>/ -> Soft delete (author or Manager / Team Leader)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        return TaskComment.objects.filter(pk=pk, is_active=True).select_related('user', 'task').first()
+
+    def get(self, request, pk):
+        comment = self.get_object(pk)
+        if not comment:
+            return Response({'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(TaskCommentSerializer(comment).data)
+
+    def patch(self, request, pk):
+        comment = self.get_object(pk)
+        if not comment:
+            return Response({'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+        if comment.user_id != request.user.id:
+            return Response({'error': 'Only the author can edit this comment.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = TaskCommentSerializer(comment, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        comment = self.get_object(pk)
+        if not comment:
+            return Response({'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+        if comment.user_id != request.user.id and not can_manage_tasks(request.user):
+            return Response({'error': 'You are not allowed to delete this comment.'}, status=status.HTTP_403_FORBIDDEN)
+        comment.is_active = False
+        comment.deleted_by = request.user
+        comment.deleted_at = timezone.now()
+        comment.save()
+        return Response({'message': 'Comment deleted successfully'}, status=status.HTTP_200_OK)

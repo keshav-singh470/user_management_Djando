@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Client, Project, Profile, ProjectAttachment
+from .models import User, Client, Project, Profile, ProjectAttachment, ProjectTask, TaskComment
 
 admin.site.register(User, UserAdmin)
 
@@ -40,3 +40,18 @@ class ProfileAdmin(admin.ModelAdmin):
         if obj and obj.is_default:
             return False
         return super().has_change_permission(request, obj)
+
+@admin.register(ProjectTask)
+class ProjectTaskAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'project', 'assigned_to', 'status', 'priority', 'deadline_date', 'is_active')
+    list_filter = ('is_active', 'status', 'priority')
+    search_fields = ('title', 'project__title', 'assigned_to__email')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(TaskComment)
+class TaskCommentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'task', 'user', 'hours_spent', 'is_active', 'created_at')
+    list_filter = ('is_active',)
+    search_fields = ('comment', 'task__title', 'user__email')
+    readonly_fields = ('created_at', 'updated_at')

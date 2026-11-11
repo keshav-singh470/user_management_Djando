@@ -2,7 +2,7 @@
   "info": {
     "name": "User Management APIs",
     "_postman_id": "um-complete-suite-2026",
-    "description": "End-to-end API collection: Auth, Users, Profiles (6 default protected + custom), Clients, Projects (attachments inside the Project API, Manager-only assignment, creation emails), Search/Filters and Restore APIs, with positive and negative cases. For file rows: click Select Files and pick a real file before sending.",
+    "description": "End-to-end API collection: Auth, Users, Profiles, Clients, Projects, Project Tasks, My Tasks, Task Comments and Role-Based Permission tests.\n\nSETUP: (1) Login as Admin (folder 1). (2) Create Developer, Manager and Team Leader users (folder 2). (3) Run the 3 role logins in folder 1 - they save manager_token / team_leader_token / developer_token. (4) Set project_id (collection variable) to a project that has a date_of_completion.\n\nID variables task_id, comment_id, dev_comment_id are saved automatically by the create requests.\n\nFILE UPLOAD: file rows are disabled by default. Tick the row, click 'Select Files', pick a real file (not a folder).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,6 +19,41 @@
     {
       "key": "refresh_token",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "manager_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "team_leader_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "developer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "task_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "comment_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "dev_comment_id",
+      "value": "1",
       "type": "string"
     }
   ],
@@ -40,7 +75,8 @@
                 "key": "Content-Type",
                 "value": "application/json"
               }
-            ]
+            ],
+            "description": "Your Admin / Super Admin account. Saves access_token."
           },
           "event": [
             {
@@ -51,6 +87,108 @@
                   "    var json = pm.response.json();",
                   "    pm.collectionVariables.set('access_token', json.access);",
                   "    pm.collectionVariables.set('refresh_token', json.refresh);",
+                  "    pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Received JWT access token', () => pm.expect(json.access).to.be.a('string'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Manager (saves manager_token)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"manager.test@example.com\",\n  \"password\": \"manager.test@123\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Create the Manager user first (Users folder). Default password = <email prefix>@123."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('manager_token', json.access);",
+                  "    pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Received JWT access token', () => pm.expect(json.access).to.be.a('string'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Team Leader (saves team_leader_token)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"tl.test@example.com\",\n  \"password\": \"tl.test@123\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Create the Team Leader user first (Users folder). Default password = <email prefix>@123."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('team_leader_token', json.access);",
+                  "    pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Received JWT access token', () => pm.expect(json.access).to.be.a('string'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Developer (saves developer_token)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"rahul.sharma@example.com\",\n  \"password\": \"rahul.sharma@123\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Create the Developer user first (Users folder). Default password = <email prefix>@123."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('developer_token', json.access);",
                   "    pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "    pm.test('Received JWT access token', () => pm.expect(json.access).to.be.a('string'));",
                   "}"
@@ -75,7 +213,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Login - Missing Email (400)",
@@ -92,7 +241,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Login - Missing Password (400)",
@@ -109,7 +269,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Send OTP (Success)",
@@ -143,7 +314,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Verify OTP (Success)",
@@ -177,7 +359,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Forgot Password - Send Reset OTP",
@@ -288,7 +481,7 @@
           }
         },
         {
-          "name": "Create User (Success - profile required)",
+          "name": "Create User (Developer)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/users/",
@@ -298,12 +491,93 @@
             },
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "description": "profiles is REQUIRED. Use an existing profile name (case-insensitive)."
-          }
+            "description": "profiles is REQUIRED (case-insensitive). Login password = rahul.sharma@123. Needs the Admin token (access_token): only Super Admin / Admin / Human Resource can create users once role-based permissions are on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create User (Manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Vishal\",\n  \"last_name\": \"Panchal\",\n  \"email\": \"manager.test@example.com\",\n  \"profiles\": \"manager\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "'manager' -> 'Manager'. Login password = manager.test@123. Use this user as assigned_manager. Needs the Admin token (access_token): only Super Admin / Admin / Human Resource can create users once role-based permissions are on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create User (Team Leader)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Tina\",\n  \"last_name\": \"Leader\",\n  \"email\": \"tl.test@example.com\",\n  \"profiles\": \"Team Leader\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Login password = tl.test@123. Team Leaders can create tasks and be assigned tasks. Needs the Admin token (access_token): only Super Admin / Admin / Human Resource can create users once role-based permissions are on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create User - New Profile Auto-Created",
@@ -316,29 +590,15 @@
             },
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "description": "If the profile name does not exist, a new (non-default, deletable) profile is created automatically."
-          }
-        },
-        {
-          "name": "Create User - Default Profile 'Manager' (Success)",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/users/",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Vishal\",\n  \"last_name\": \"Panchal\",\n  \"email\": \"manager.test@example.com\",\n  \"profiles\": \"manager\"\n}"
-            },
-            "header": [
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
-            "description": "Profile name is case-insensitive ('manager' -> 'Manager'). Use this user as assigned_manager in a project."
+            "description": "If the profile name does not exist, a new (non-default, deletable) profile is created automatically."
           }
         },
         {
@@ -352,12 +612,27 @@
             },
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
             "description": "Expect 400: Profile is required."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create User - Blank Profile (400)",
@@ -370,12 +645,27 @@
             },
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
             "description": "Expect 400: Profile cannot be blank."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create User - Missing Email (400)",
@@ -388,11 +678,26 @@
             },
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create User - Duplicate Email (400)",
@@ -405,11 +710,26 @@
             },
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get Single User (Success)",
@@ -435,7 +755,18 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Update User (Partial PATCH)",
@@ -455,7 +786,8 @@
                 "key": "Content-Type",
                 "value": "application/json"
               }
-            ]
+            ],
+            "description": "Saves modified_by + modified_at."
           }
         },
         {
@@ -532,7 +864,8 @@
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
-            ]
+            ],
+            "description": "Second call returns 400 'already active'."
           }
         },
         {
@@ -545,13 +878,14 @@
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
-            ]
+            ],
+            "description": "Second call returns 400 'already inactive'."
           }
         },
         {
-          "name": "Restore User (Success)",
+          "name": "Restore User (PUT - Success)",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "url": "{{base_url}}/users/25/restore/",
             "header": [
               {
@@ -559,13 +893,13 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Works only on a soft-deleted user. Saves restored_by + restored_at."
+            "description": "PUT (not POST). Works only on a soft-deleted user. The user who restored is saved in modified_by."
           }
         },
         {
           "name": "Restore User - Already Active (400)",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "url": "{{base_url}}/users/24/restore/",
             "header": [
               {
@@ -573,12 +907,23 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Restore User - Not Found (404)",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "url": "{{base_url}}/users/99999/restore/",
             "header": [
               {
@@ -586,7 +931,18 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Search Users (?search=rahul)",
@@ -614,7 +970,7 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Searches name / email / phone etc. Multi-word search works too, e.g. 'rahul sharma'."
+            "description": "Searches name / email / username / phone. Multi-word search works too, e.g. 'rahul sharma'."
           }
         },
         {
@@ -674,11 +1030,11 @@
           }
         },
         {
-          "name": "Filter Users by Country (?country=India)",
+          "name": "Filter Users by Nationality (?nationality=India)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/users/?country=India",
+              "raw": "{{base_url}}/users/?nationality=India",
               "host": [
                 "{{base_url}}"
               ],
@@ -688,7 +1044,7 @@
               ],
               "query": [
                 {
-                  "key": "country",
+                  "key": "nationality",
                   "value": "India"
                 }
               ]
@@ -698,7 +1054,8 @@
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
-            ]
+            ],
+            "description": "Users have 'nationality' (not 'country'). Clients have 'countries' and use ?country=."
           }
         },
         {
@@ -849,7 +1206,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Profile - Blank Name (400)",
@@ -870,7 +1238,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Profile - Duplicate Name (400)",
@@ -891,7 +1270,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Profile - Duplicate Name Different Case (400)",
@@ -913,7 +1303,18 @@
               }
             ],
             "description": "Names are unique case-insensitively: 'admin' is rejected when 'Admin' exists."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get Single Profile (GET)",
@@ -939,7 +1340,18 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Update Profile (PATCH)",
@@ -982,7 +1394,7 @@
                 "value": "application/json"
               }
             ],
-            "description": "Use the id of a default profile (Super Admin / Admin / Manager / Team Leader / Developer / Human Resource). Default profiles cannot be edited. Expect 403."
+            "description": "Use the id of a default profile. Default profiles cannot be edited. Expect 403."
           },
           "event": [
             {
@@ -1007,7 +1419,7 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Use the id of a default profile (Super Admin / Admin / Manager / Team Leader / Developer / Human Resource). Expect 403."
+            "description": "Use the id of a default profile. Expect 403."
           },
           "event": [
             {
@@ -1269,7 +1681,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Create Client - Missing email_id (400)",
@@ -1290,7 +1713,18 @@
                 "value": "application/json"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Get Single Client (Active - 200)",
@@ -1432,7 +1866,18 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "Restore Client - Not Found (404)",
@@ -1445,7 +1890,394 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Client - Duplicate email_id (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Dup\",\n  \"email_id\": \"amar.sharma@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "email_id is unique. Run after 'Create Client (Success)'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Client - Invalid Email Format (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Bad\",\n  \"email_id\": \"notanemail\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Client - Blank first_name (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"\",\n  \"email_id\": \"blank.name@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Client - Unauthorized (401)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Amar\",\n  \"email_id\": \"x@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Client - Not Found (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clients/99999/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Client (PUT)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/clients/7/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Amar\",\n  \"email_id\": \"amar.sharma@example.com\",\n  \"countries\": \"India\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "PUT works like PATCH. Saves updated_by."
           }
+        },
+        {
+          "name": "Update Client - Duplicate email_id (400)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/clients/7/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_id\": \"other.client@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Use the email_id of ANOTHER existing client. Expect 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Client - Not Found (404)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/clients/99999/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"x\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Soft Delete Client - Not Found / Already Deleted (404)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/clients/99999/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate Client - Already Active (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/7/activate/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Use an ACTIVE client id. Expect 400 'already active'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate Client - Already Inactive (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/6/deactivate/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Use an INACTIVE client id. Expect 400 'already inactive'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate Client - Not Found (404)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/99999/activate/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate Client - Not Found (404)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/99999/deactivate/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clients - Unauthorized List (401)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clients/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
@@ -1463,7 +2295,7 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "List shows attachments_count only."
+            "description": "List shows attachments_count and tasks_count."
           }
         },
         {
@@ -1663,6 +2495,92 @@
           }
         },
         {
+          "name": "Filter Projects - Has Tasks (?has_tasks=true)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?has_tasks=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "has_tasks",
+                  "value": "true"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Only projects that have at least one active task."
+          }
+        },
+        {
+          "name": "Filter Projects - No Tasks (?has_tasks=false)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?has_tasks=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "has_tasks",
+                  "value": "false"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Filter Projects - Tasks Assigned To a User (?task_assigned_to=26)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/?task_assigned_to=26",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "task_assigned_to",
+                  "value": "26"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "description": "Projects where user 26 has at least one active task."
+          }
+        },
+        {
           "name": "Search + Filter Projects (?search=erp&status=Pending)",
           "request": {
             "method": "GET",
@@ -1695,7 +2613,7 @@
           }
         },
         {
-          "name": "Create Project (JSON - Manager assigned, 2 emails sent)",
+          "name": "Create Project (JSON - IDs, 2 emails sent)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/projects/",
@@ -1713,14 +2631,117 @@
                 "value": "application/json"
               }
             ],
-            "description": "assigned_manager (24) must be a user with the 'Manager' profile. Expect 201 and one email to the client and one to the manager. JSON cannot carry files; use the form-data request below for files."
+            "description": "assigned_manager (24) must have the 'Manager' profile. Expect 201 + one email to the client and one to the manager. JSON cannot carry files; use the form-data request for files."
           },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('project_id', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project - Client & Manager by Email (201)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Email Assign Project\",\n  \"type\": \"Web App\",\n  \"client\": \"amar.sharma@example.com\",\n  \"assigned_manager\": \"manager.test@example.com\",\n  \"date_of_completion\": \"2026-12-31\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "client accepts id or client email; assigned_manager accepts id or manager email. Saves the new id in {{project_id}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('project_id', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project - Manager Email Not Found (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Role Check Project\",\n  \"type\": \"Web App\",\n  \"assigned_manager\": \"nobody@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project - Client Email Not Found (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Role Check Project\",\n  \"type\": \"Web App\",\n  \"client\": \"nobody@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
                 ],
                 "type": "text/javascript"
               }
@@ -1734,7 +2755,7 @@
             "url": "{{base_url}}/projects/",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Role Check Project\",\n  \"type\": \"Web App\",\n  \"client\": 7,\n  \"assigned_manager\": 26\n}"
+              "raw": "{\n  \"title\": \"Role Check Project\",\n  \"type\": \"Web App\",\n  \"client\": 7,\n  \"assigned_manager\": \"rahul.sharma@example.com\"\n}"
             },
             "header": [
               {
@@ -1746,7 +2767,7 @@
                 "value": "application/json"
               }
             ],
-            "description": "Change 26 to the id of a user whose profile is NOT 'Manager' (e.g. Developer). Expect 400: only users with the Manager profile can be assigned."
+            "description": "A Developer cannot be assigned as manager. Expect 400: only users with the Manager profile."
           },
           "event": [
             {
@@ -1779,6 +2800,39 @@
                 "value": "application/json"
               }
             ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project - Inactive (Soft-Deleted) Client (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Inactive Client Project\",\n  \"type\": \"Web App\",\n  \"client\": 6\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Use the id of a soft-deleted client. Only active clients can be used."
           },
           "event": [
             {
@@ -1902,14 +2956,16 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": null,
-                  "description": "First file (pdf/png/jpg/jpeg/doc/docx/xlsx/txt, max 10MB)"
+                  "src": [],
+                  "disabled": true,
+                  "description": "First file (pdf/png/jpg/jpeg/doc/docx/xlsx/txt, max 10MB) | TICK the checkbox, click 'Select Files' and pick a real file."
                 },
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": null,
-                  "description": "Second file (same key repeated)"
+                  "src": [],
+                  "disabled": true,
+                  "description": "Second file (same key repeated) | TICK the checkbox, click 'Select Files' and pick a real file."
                 }
               ]
             },
@@ -1919,7 +2975,7 @@
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Click 'Select Files' on each uploaded_files row and choose a real file (not a folder). Do NOT add a Content-Type header manually. Key must be exactly 'uploaded_files'. assigned_manager must have the Manager profile."
+            "description": "FILE UPLOAD: the two uploaded_files rows are disabled by default so the request never fails with EISDIR. To upload: tick the row, click 'Select Files', pick a real file (not a folder). Do NOT add a Content-Type header manually."
           }
         },
         {
@@ -1943,8 +2999,9 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": null,
-                  "description": "Select a .exe or .zip file"
+                  "src": [],
+                  "disabled": true,
+                  "description": "Select a .exe or .zip file | TICK the checkbox, click 'Select Files' and pick a real file."
                 }
               ]
             },
@@ -1953,28 +3010,29 @@
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
-            ]
+            ],
+            "description": "Tick the file row and select a .exe/.zip. Expect 400. With the row unticked the project is created without a file (201)."
           }
         },
         {
           "name": "Get Single Project (Active - 200)",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/projects/1/",
+            "url": "{{base_url}}/projects/{{project_id}}/",
             "header": [
               {
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
             ],
-            "description": "Detail shows the full attachments list with ids."
+            "description": "Detail shows the full attachments list with ids. Uses {{project_id}}."
           }
         },
         {
           "name": "Update Project (Partial PATCH)",
           "request": {
             "method": "PATCH",
-            "url": "{{base_url}}/projects/1/",
+            "url": "{{base_url}}/projects/{{project_id}}/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"In Progress\",\n  \"description\": \"Updated project scope and timeline\"\n}"
@@ -1995,15 +3053,16 @@
           "name": "Update Project - Add Attachments (PATCH form-data)",
           "request": {
             "method": "PATCH",
-            "url": "{{base_url}}/projects/1/",
+            "url": "{{base_url}}/projects/{{project_id}}/",
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": null,
-                  "description": "New file to add (existing files stay)"
+                  "src": [],
+                  "disabled": true,
+                  "description": "New file to add (existing files stay) | TICK the checkbox, click 'Select Files' and pick a real file."
                 }
               ]
             },
@@ -2012,14 +3071,15 @@
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
-            ]
+            ],
+            "description": "Tick the row and select a real file first."
           }
         },
         {
           "name": "Update Project - Remove Specific Attachment (PATCH form-data)",
           "request": {
             "method": "PATCH",
-            "url": "{{base_url}}/projects/1/",
+            "url": "{{base_url}}/projects/{{project_id}}/",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -2043,7 +3103,7 @@
           "name": "Update Project - Replace Attachment (PATCH form-data)",
           "request": {
             "method": "PATCH",
-            "url": "{{base_url}}/projects/1/",
+            "url": "{{base_url}}/projects/{{project_id}}/",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -2055,8 +3115,9 @@
                 {
                   "key": "uploaded_files",
                   "type": "file",
-                  "src": null,
-                  "description": "New file that replaces the removed one"
+                  "src": [],
+                  "disabled": true,
+                  "description": "New file that replaces the removed one | TICK the checkbox, click 'Select Files' and pick a real file."
                 }
               ]
             },
@@ -2072,7 +3133,7 @@
           "name": "Soft Delete Project",
           "request": {
             "method": "DELETE",
-            "url": "{{base_url}}/projects/1/",
+            "url": "{{base_url}}/projects/{{project_id}}/",
             "header": [
               {
                 "key": "Authorization",
@@ -2087,13 +3148,13 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{base_url}}/projects/1/?hard=true",
+              "raw": "{{base_url}}/projects/{{project_id}}/?hard=true",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "projects",
-                "1",
+                "{{project_id}}",
                 ""
               ],
               "query": [
@@ -2108,14 +3169,15 @@
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}"
               }
-            ]
+            ],
+            "description": "Also permanently deletes the project's tasks and comments (CASCADE)."
           }
         },
         {
           "name": "Restore Project (Success)",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/projects/1/restore/",
+            "url": "{{base_url}}/projects/{{project_id}}/restore/",
             "header": [
               {
                 "key": "Authorization",
@@ -2149,7 +3211,3093 @@
                 "value": "Bearer {{access_token}}"
               }
             ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Project Tasks",
+      "description": "Before this folder: (1) create Manager, Team Leader and Developer users, (2) run the 3 role logins in folder 1, (3) set the collection variable project_id to a project whose date_of_completion is 2026-12-31 or later. The Admin token cannot create tasks (only Manager / Team Leader).",
+      "item": [
+        {
+          "name": "Create Task (Manager - assign by email)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build login page\",\n  \"description\": \"Email + password login screen\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-20\",\n  \"priority\": \"High\",\n  \"estimated_hours\": 12\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "POST /projects/<id>/tasks/. The project comes from the URL. Status becomes Pending automatically. assigned_to accepts user id or email. Saves the new id in {{task_id}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('task_id', pm.response.json().id);",
+                  "}",
+                  "pm.test('Task starts as Pending', () => pm.expect(pm.response.json().status).to.eql('Pending'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task (assign by user ID)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Design database schema\",\n  \"assigned_to\": 26,\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-25\",\n  \"priority\": \"Medium\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Change 26 to the id of your Developer / Team Leader user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - 'status' in body is ignored (still Pending)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Status ignored\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-15\",\n  \"status\": \"Completed\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Even if status=Completed is sent, a new task is always Pending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('task_id', pm.response.json().id);",
+                  "}",
+                  "pm.test('Task starts as Pending', () => pm.expect(pm.response.json().status).to.eql('Pending'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Without Assignee (201)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Unassigned task\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task (Team Leader allowed)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Task by Team Leader\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_leader_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Assign to Team Leader (201)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Task for Team Leader\",\n  \"assigned_to\": \"tl.test@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - As Developer (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build login page\",\n  \"description\": \"Email + password login screen\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-20\",\n  \"priority\": \"High\",\n  \"estimated_hours\": 12\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Only Manager / Team Leader can create tasks."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - As Admin (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build login page\",\n  \"description\": \"Email + password login screen\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-20\",\n  \"priority\": \"High\",\n  \"estimated_hours\": 12\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Admin token (access_token) is not Manager / Team Leader, so 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Missing Title (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Missing Dates (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"No dates\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Deadline Before Start Date (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bad dates\",\n  \"start_date\": \"2026-11-20\",\n  \"deadline_date\": \"2026-11-10\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Deadline After Project Completion Date (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Too late\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2030-01-01\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Rule: start_date <= deadline_date <= project date_of_completion."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Assign to a Manager (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Wrong assignee\",\n  \"assigned_to\": \"manager.test@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Only Team Leader / Developer can be assigned."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Assignee Email Not Found (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Unknown assignee\",\n  \"assigned_to\": \"nobody@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Invalid Priority (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bad priority\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-18\",\n  \"priority\": \"Urgent\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Allowed: Low, Medium, High (exact case)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Project Not Found (404)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/99999/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build login page\",\n  \"description\": \"Email + password login screen\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-20\",\n  \"priority\": \"High\",\n  \"estimated_hours\": 12\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Task - Unauthorized (401)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build login page\",\n  \"description\": \"Email + password login screen\",\n  \"assigned_to\": \"rahul.sharma@example.com\",\n  \"start_date\": \"2026-11-06\",\n  \"deadline_date\": \"2026-11-20\",\n  \"priority\": \"High\",\n  \"estimated_hours\": 12\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tasks of a Project (Paginated)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/projects/{{project_id}}/tasks/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tasks - Search (?search=login)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?search=login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "login"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
           }
+        },
+        {
+          "name": "List Tasks - Filter Status (?status=Pending)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?status=Pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "List Tasks - Filter Priority (?priority=High)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?priority=High",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "priority",
+                  "value": "High"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "List Tasks - Filter Assigned To (?assigned_to=26)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?assigned_to=26",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "assigned_to",
+                  "value": "26"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "List Tasks - Search + Filters",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?search=login&status=Pending&priority=High",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "login"
+                },
+                {
+                  "key": "status",
+                  "value": "Pending"
+                },
+                {
+                  "key": "priority",
+                  "value": "High"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "List Deleted Tasks (?is_active=false)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?is_active=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "is_active",
+                  "value": "false"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "List All Tasks incl. Deleted (?all=true)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks/?all=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "all",
+                  "value": "true"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "List Tasks - Project Not Found (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/projects/99999/tasks/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Single Task (with comments)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "description": "Detail includes the comments list; list responses only show comments_count."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Task - Not Found (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/99999/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task (Manager - fields)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Build login page v2\",\n  \"priority\": \"Medium\",\n  \"deadline_date\": \"2026-11-22\",\n  \"estimated_hours\": 14\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Manager / Team Leader can edit everything except status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Re-assign by Email (Manager)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"tl.test@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Re-assign back to Developer",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"rahul.sharma@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - PUT works like PATCH",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated via PUT\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Manager Changes Status (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Only the assigned user can change the status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Assignee Sets In Progress (Developer)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Run when the Developer is the assignee."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Assignee Sets Completed (completion_date auto)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Completed\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "completion_date is set to today automatically."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('completion_date filled automatically', () => pm.expect(pm.response.json().completion_date).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Assignee Re-opens (completion_date cleared)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"On Hold\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Leaving Completed clears completion_date."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Assignee Invalid Status (400)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Done\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Assignee Edits Title (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Hacked title\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "The assignee can update only status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Not Assigned Team Leader Changes Status (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_leader_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Team Leader who is NOT the assignee cannot change status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Deadline After Project Completion (400)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deadline_date\": \"2030-01-01\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task - Not Found (404)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/tasks/99999/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"x\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Soft Delete Task - As Developer (403)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ],
+            "description": "Developers cannot delete tasks."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Soft Delete Task (Manager)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "description": "Saves deleted_by + deleted_at. Comments stay linked."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Soft-Deleted Task (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/{{task_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Task - As Developer (403)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/tasks/{{task_id}}/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Task (PUT - Success)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/tasks/{{task_id}}/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "description": "PUT. Works only on a soft-deleted task whose project is active. Saves restored_by + restored_at."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Task - Already Active (400)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/tasks/{{task_id}}/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Task - Not Found (404)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/tasks/99999/restore/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. My Tasks (GET /tasks/)",
+      "item": [
+        {
+          "name": "Developer - My Tasks (only own tasks)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ],
+            "description": "Developers (non-managers) only ever see tasks assigned to themselves."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - ?assigned_to=me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?assigned_to=me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "assigned_to",
+                  "value": "me"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Developer - Filter Status (?status=In Progress)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?status=In Progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "In Progress"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Developer - Filter Priority (?priority=High)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?priority=High",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "priority",
+                  "value": "High"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Developer - Filter Project (?project=1)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?project=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "project",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Developer - Search (?search=login)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?search=login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "login"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Developer - Combined Filters",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?status=Pending&priority=High&search=login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Pending"
+                },
+                {
+                  "key": "priority",
+                  "value": "High"
+                },
+                {
+                  "key": "search",
+                  "value": "login"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Manager - All Tasks of All Projects",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager - Tasks of One Developer (?assigned_to=26)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?assigned_to=26",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "assigned_to",
+                  "value": "26"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "description": "Change 26 to the Developer's user id."
+          }
+        },
+        {
+          "name": "Manager - ?assigned_to=me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?assigned_to=me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "assigned_to",
+                  "value": "me"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Manager - High Priority Tasks (?priority=High)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?priority=High",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "priority",
+                  "value": "High"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Manager - Deleted Tasks (?is_active=false)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?is_active=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "is_active",
+                  "value": "false"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Manager - All incl. Deleted (?all=true)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/tasks/?all=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "all",
+                  "value": "true"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Admin - All Tasks (Admin sees everything)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "My Tasks - Unauthorized (401)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Task Comments",
+      "item": [
+        {
+          "name": "Add Comment (Manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Please share the design before starting.\",\n  \"hours_spent\": 1\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Saves the id in {{comment_id}}. The author is the logged-in user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('comment_id', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment with Hours (Developer)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Login form done, API connected.\",\n  \"hours_spent\": 4.5\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Any Manager / Team Leader / Developer can comment. Saves the id in {{dev_comment_id}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('dev_comment_id', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment without Hours (Team Leader)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Reviewed the PR.\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_leader_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - As Admin (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Not allowed\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Only Manager / Team Leader / Developer profiles can comment. Admin token -> 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - Missing Comment Text (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hours_spent\": 2\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - Hours = 0 (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Zero hours\",\n  \"hours_spent\": 0\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - Negative Hours (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Negative\",\n  \"hours_spent\": -2\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - Hours Not a Number (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Text hours\",\n  \"hours_spent\": \"abc\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - Task Not Found (404)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/99999/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"x\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Comment - Unauthorized (401)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"x\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Comments of a Task (Paginated)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/{{task_id}}/comments/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Comments - Task Not Found (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tasks/99999/comments/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Single Comment",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/comments/{{comment_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Comment - Not Found (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/comments/99999/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Own Comment (Manager)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/comments/{{comment_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Please share the design before starting (updated).\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Own Comment - Change Hours (Developer)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/comments/{{dev_comment_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hours_spent\": 5\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Own Comment - PUT works like PATCH",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/comments/{{dev_comment_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Login form done, API connected, tested.\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Someone Else's Comment (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/comments/{{comment_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Hijack\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Only the author can edit."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Comment - Even Manager Cannot Edit Others' (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/comments/{{dev_comment_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Hijack\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Someone Else's Comment - As Developer (403)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/comments/{{comment_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ],
+            "description": "Author, Manager or Team Leader can delete."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Own Comment (Developer - soft delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/comments/{{dev_comment_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Another User's Comment (Manager allowed)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/comments/{{comment_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "description": "Manager / Team Leader can delete any comment."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Deleted Comment (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/comments/{{comment_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Comment - Not Found (404)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/comments/99999/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Role-Based Permission Tests",
+      "item": [
+        {
+          "name": "Developer - View Clients (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/clients/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ],
+            "description": "Viewing is allowed for every logged-in user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - View Projects (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/projects/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - View Users (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Create Client (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Blocked\",\n  \"email_id\": \"blocked@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Update Client (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/clients/7/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"x\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Delete Client (403)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/clients/7/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Create Project (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/projects/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Blocked\",\n  \"type\": \"Web App\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Delete Project (403)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/projects/{{project_id}}/",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Create User (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"blocked.user@example.com\",\n  \"profiles\": \"Developer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Change Own Profile to Super Admin (403)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/users/26/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profiles\": \"Super Admin\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Change 26 to the Developer's own id. Blocked: only Super Admin / Admin / HR can edit users."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Developer - Create Profile (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/profiles/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Blocked Profile\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{developer_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager - Create Client (201)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"ManagerMade\",\n  \"email_id\": \"manager.made@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Manager is allowed to write clients and projects."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager - Create User (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"blocked.by.manager@example.com\",\n  \"profiles\": \"Developer\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Only Super Admin / Admin / Human Resource can create users."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager - Create Profile (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/profiles/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Blocked Profile 2\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Team Leader - Create Client (403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Blocked\",\n  \"email_id\": \"tl.blocked@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_leader_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin - Create Client (201)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clients/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"AdminMade\",\n  \"email_id\": \"admin.made@example.com\"\n}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     }

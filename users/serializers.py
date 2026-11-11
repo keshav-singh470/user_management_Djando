@@ -1,11 +1,12 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import User, Client, Profile, Project, ProjectAttachment
+from .models import User, Client, Profile, Project, ProjectAttachment, ProjectTask, TaskComment
 from django.core.cache import cache
 from django.db.models import Q
 
 import os
 from django.db import transaction
+from django.utils import timezone
 
 
 class DynamicProfileField(serializers.SlugRelatedField):
@@ -236,6 +237,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'name': {
                 'required': True,
                 'allow_blank': False,
+                'allow_null': False,
                 'error_messages': {'required': 'Profile name is required.'}
             }
         }
@@ -277,14 +279,7 @@ class ClientSerializer(serializers.ModelSerializer):
         }
 
     def _format_user(self, user):
-        if not user:
-            return None
-        name = f"{user.first_name} {user.last_name}".strip()
-        return {
-            "id": user.id,
-            "name": name if name else user.username,
-            "email": user.email,
-        }
+        return _user_summary(user)
 
     def get_created_by(self, obj):
         return self._format_user(obj.created_by)
@@ -356,6 +351,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     restored_by = serializers.SerializerMethodField()
     attachments = serializers.SerializerMethodField()
     attachments_count = serializers.SerializerMethodField()
+    tasks_count = serializers.SerializerMethodField()
 
     uploaded_files = serializers.ListField(
         child=serializers.FileField(),
@@ -387,29 +383,24 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by']
         extra_kwargs = {
-            'title': {'required': True, 'error_messages': {'required': 'Project title is required.'}},
-            'type': {'required': True, 'error_messages': {'required': 'Project type is required.'}},
+            'title': {'required': True, 'allow_blank': False, 'allow_null': False,
+                        'error_messages': {'required': 'Project title is required.'}},
+            'type': {'required': True, 'allow_blank': False, 'allow_null': False,
+                        'error_messages': {'required': 'Project type is required.'}},
             'client': {'required': False, 'allow_null': True},
         }
 
     def _format_user(self, user):
-        if not user:
-            return None
-        name = f"{user.first_name} {user.last_name}".strip()
-        return {
-            "id": user.id,
-            "name": name if name else user.username,
-            "email": user.email,
-        }
+        return _user_summary(user)
 
      # Helper method for formatting client data in response
     def _format_client(self, client):
         if not client:
             return None
-        name = f"{client.first_name or ''} {client.last_name or ''}".strip()
         return {
             "id": client.id,
-            "name": name if name else "Unnamed Client",
+            "first_name": client.first_name,
+            "last_name": client.last_name,
             "email": client.email_id,
             "contact_no": client.contact_no,
         }
@@ -432,9 +423,12 @@ class ProjectSerializer(serializers.ModelSerializer):
             obj.attachments.all(), many=True, context={'request': request}
         ).data
 
-    def get_attachments_count(self, obj):        #Attachmnet
+    def get_attachments_count(self, obj):        #Attachmnet_count
         return obj.attachments.count()
 
+    def get_tasks_count(self, obj):              # Task_count        
+        return obj.tasks.filter(is_active=True).count()
+        
     def validate_uploaded_files(self, files):
         for f in files:
             validate_single_file(f)
@@ -451,6 +445,15 @@ class ProjectSerializer(serializers.ModelSerializer):
         if not user.is_active or user.status != 'Active':
             raise serializers.ValidationError("Assigned manager must be an active user.")
         return user
+
+    def validate_title(self, value):
+        value = value.strip()
+        qs = Project.objects.filter(title__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A project with this title already exists.")
+        return value
 
 
     def _save_files(self, project, files):
@@ -529,5 +532,135 @@ class ProjectAttachmentSerializer(serializers.ModelSerializer):
         
 
     
+# ==========================================
+# PROJECT TASK + COMMENT SERIALIZERS
+# ==========================================
+
+def _user_summary(user):
+    if not user:
+        return None
+    return {
+        "id": user.id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "role": user.profiles.name if user.profiles else None,
+    }
+
+
+class TaskCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskComment
+        fields = ['id', 'task', 'user', 'comment', 'hours_spent', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'task', 'user', 'created_at', 'updated_at']
+        extra_kwargs = {'comment': {'required': True, 'allow_blank': False, 'allow_null': False,
+                            'error_messages': {'required': 'Comment is required.'}}}
+
+    def validate_hours_spent(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Hours spent must be greater than 0.")
+        return value
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['user'] = _user_summary(instance.user)
+        if (instance.updated_at - instance.created_at).total_seconds() < 1:
+            ret.pop('updated_at', None)
+        return ret
+
+
+class ProjectTaskSerializer(serializers.ModelSerializer):
+    created_by = serializers.SerializerMethodField()
+    updated_by = serializers.SerializerMethodField()
+    comments = serializers.SerializerMethodField()
+    comments_count = serializers.SerializerMethodField()
+
+    # id ya email se user assign hoga (ManagerRelatedField ki tarah)
+    assigned_to = ManagerRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+
+    class Meta:
+        model = ProjectTask
+        fields = '__all__'
+        read_only_fields = ['id', 'project', 'is_active', 'completion_date', 'created_at', 'updated_at',
+                    'created_by', 'updated_by']
+        extra_kwargs = {
+            'title': {'required': True, 'allow_blank': False, 'allow_null': False,
+                              'error_messages': {'required': 'Task title is required.'}},
+            'start_date': {'required': True, 'allow_null': False,
+                              'error_messages': {'required': 'Start date is required.'}},
+            'deadline_date': {'required': True, 'allow_null': False,
+                              'error_messages': {'required': 'Deadline date is required.'}},
+        }
+
+    def get_created_by(self, obj):
+        return _user_summary(obj.created_by)
+
+    def get_updated_by(self, obj):
+        return _user_summary(obj.updated_by)
+
+    def get_comments(self, obj):
+        return TaskCommentSerializer(obj.comments.filter(is_active=True), many=True).data
+
+    def get_comments_count(self, obj):
+        return obj.comments.filter(is_active=True).count()
+
+    def validate_assigned_to(self, user):
+        if user is None:
+            return user
+        role = user.profiles.name if user.profiles else None
+        if role not in ('Team Leader', 'Developer'):
+            raise serializers.ValidationError(
+                "Only a user with the 'Team Leader' or 'Developer' profile can be assigned to a task."
+            )
+        if not user.is_active or user.status != 'Active':
+            raise serializers.ValidationError("Assigned user must be an active user.")
+        return user
+
+    def validate_title(self, value):
+        value = value.strip()
+        project = self.context.get('project') or (self.instance.project if self.instance else None)
+        qs = ProjectTask.objects.filter(project=project, title__iexact=value, is_active=True)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A task with this title already exists in this project.")
+        return value
+
+    def validate(self, attrs):
+        project = self.context.get('project') or (self.instance.project if self.instance else None)
+        start = attrs.get('start_date', self.instance.start_date if self.instance else None)
+        deadline = attrs.get('deadline_date', self.instance.deadline_date if self.instance else None)
+        if start and deadline and deadline < start:
+            raise serializers.ValidationError({'deadline_date': "Deadline date cannot be before the start date."})
+        if project and project.date_of_completion and deadline and deadline > project.date_of_completion:
+            raise serializers.ValidationError({
+                'deadline_date': f"Deadline date cannot be after the project's completion date ({project.date_of_completion})."
+            })
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['status'] = 'Pending'          # create par hamesha Pending
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        new_status = validated_data.get('status', instance.status)
+        if new_status == 'Completed' and instance.status != 'Completed':
+            validated_data['completion_date'] = timezone.localdate()
+        elif new_status != 'Completed' and instance.status == 'Completed':
+            validated_data['completion_date'] = None
+        return super().update(instance, validated_data)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['project'] = {"id": instance.project.id, "title": instance.project.title}
+        ret['assigned_to'] = _user_summary(instance.assigned_to)
+        for field in ['updated_by']:
+            if ret.get(field) is None:
+                ret.pop(field, None)
+        if not instance.updated_by:
+            ret.pop('updated_at', None)
+        if not self.context.get('include_comments'):
+            ret.pop('comments', None)
+        return ret
 
      

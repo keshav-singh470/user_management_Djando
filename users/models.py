@@ -2,7 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 class Profile(models.Model):
-    name = models.CharField(max_length=50, unique=True) # e.g. Admin, Developer, HR, Manager
+    name = models.CharField(max_length=50, unique=True, null=True, blank=True) # e.g. Admin, Developer, HR, Manager
     is_default = models.BooleanField(default=False)   # True = system profile, delete nahi hoga
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
@@ -83,8 +83,8 @@ class Project(models.Model):
         ('On Hold', 'On Hold'),
     ]
 
-    title = models.CharField(max_length=200)
-    type = models.CharField(max_length=100) # e.g. Web App, Mobile App, AI, etc.
+    title = models.CharField(max_length=200, null=True, blank=True)
+    type = models.CharField(max_length=100, null=True, blank=True) # e.g. Web App, Mobile App, AI, etc.
     date_of_completion = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     description = models.TextField(null=True, blank=True)
@@ -129,3 +129,60 @@ class ProjectAttachment(models.Model):
 
     def __str__(self):
         return f"{self.file_name} ({self.project.title})"
+        
+
+class ProjectTask(models.Model):
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('In Progress', 'In Progress'),
+        ('Completed', 'Completed'),
+        ('On Hold', 'On Hold'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='tasks')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+
+    title = models.CharField(max_length=200, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    PRIORITY_CHOICES = [('Low', 'Low'), ('Medium', 'Medium'), ('High', 'High')]
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='Medium')
+
+    start_date = models.DateField(null=True, blank=True)
+    deadline_date = models.DateField(null=True, blank=True)
+    completion_date = models.DateField(null=True, blank=True)   # asli complete hone ki date
+    estimated_hours = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+
+    # Soft delete tracking
+    is_active = models.BooleanField(default=True)
+    # Audit tracking
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_tasks')
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_tasks')
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self):
+        return f"{self.title} ({self.project.title})"
+
+
+class TaskComment(models.Model):
+    task = models.ForeignKey(ProjectTask, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='task_comments')
+    comment = models.TextField(null=True, blank=True)
+    hours_spent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_comments')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Comment on {self.task.title}"
