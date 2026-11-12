@@ -1,12 +1,22 @@
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # Python / Django
 __pycache__/
 *.py[cod]
 *$py.class
 *.sqlite3
+*.sqlite3-journal
 media/
+staticfiles/
 venv/
+.venv/
+*.log
+
+# Editors / OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
