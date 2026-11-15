@@ -13,6 +13,55 @@ from .utils import create_and_send_otp, send_welcome_email, verify_otp, send_pro
 from .permissions import (UserWritePermission, ProfileWritePermission,
                           ClientWritePermission, ProjectWritePermission, role_of)
 
+from rest_framework.exceptions import NotFound, PermissionDenied, AuthenticationFailed
+from .exceptions import APIError
+from drf_spectacular.utils import extend_schema
+
+def fetch_active(model, pk, label, restore_hint=None):
+    if pk < 1:
+        raise APIError(
+            f'{label} id {pk} is not valid. IDs start from 1.',
+            status_code=404,
+            hint='Use the list endpoint to see valid ids.')
+    obj = model.objects.filter(pk=pk).first()
+    if obj is None:
+        raise APIError(
+            f'{label} with id {pk} is not available. It was never created, or it was permanently deleted.',
+            status_code=404,
+            hint='Check the id. Use the list endpoint with ?all=true to see valid ids.')
+    if not obj.is_active:
+        when = getattr(obj, 'deleted_at', None)
+        msg = f'{label} {pk} is currently inactive (soft-deleted)' + (f' since {when:%d %b %Y, %H:%M}.' if when else '.')
+        hint = (f'Restore it with {restore_hint}.' if restore_hint
+                else 'It cannot be read or edited, and it has no restore option.')
+        raise APIError(msg, status_code=404, hint=hint)
+    return obj
+
+PROJECT_STATUSES = ['Pending', 'In Progress', 'Completed', 'On Hold']   # <-- yahan se
+TASK_STATUSES = ['Pending', 'In Progress', 'Completed', 'On Hold']    
+TASK_PRIORITIES = ['Low', 'Medium', 'High'] 
+
+def query_int(request, param):
+    value = request.query_params.get(param)
+    if value in (None, ''):
+        return None
+    if not value.isdigit():
+        raise APIError(f"?{param} must be a whole number, for example ?{param}=7. You sent '{value}'.")
+    return int(value)
+
+def query_choice(request, param, allowed):
+    value = request.query_params.get(param)
+    if value and value.lower() not in [a.lower() for a in allowed]:
+        raise APIError(f"'{value}' is not a valid value for ?{param}.",
+                       hint=f"Allowed values: {', '.join(allowed)}.")
+    return value
+
+def query_bool(request, param):
+    value = request.query_params.get(param)
+    if value and value.lower() not in ('true', 'false'):
+        raise APIError(f"?{param} must be true or false. You sent '{value}'.")
+    return value.lower() if value else None
+
 def apply_search(queryset, search, fields):
     """'john sharma' jaise multi-word search ko har word par fields mein dhundhta hai."""
     if not search:
@@ -80,10 +129,7 @@ class UserDetailView(APIView):
     permission_classes = [UserWritePermission]
 
     def get_object(self, pk):
-        try:
-            return User.objects.get(pk=pk, is_active=True)
-        except User.DoesNotExist:
-            return None
+        return fetch_active(User, pk, 'User', f'PUT /api/users/{pk}/restore/')
 
     def get(self, request, pk):
         user = self.get_object(pk)
@@ -181,10 +227,25 @@ class LoginView(APIView):
         login_serializer.is_valid(raise_exception=True)
         user = get_active_user(login_serializer.validated_data['email'])
         if not user or not user.check_password(login_serializer.validated_data['password']):
-            return Response({'error': 'Invalid credentials'}, status=401)
+            raise AuthenticationFailed('Invalid email or password.')
         refresh = RefreshToken.for_user(user)
         return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
 
+class MeView(APIView):
+    """GET /api/auth/me/ -> Logged-in user's details and role."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+
+class HealthView(APIView):
+    """GET /api/health/ -> Server is running (used by Render / monitoring)."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        return Response({'status': 'ok'})
 
 # users/views.py
 
@@ -214,7 +275,8 @@ class VerifyOTPView(APIView):
         verify_otp_serializer.is_valid(raise_exception=True)
         user = get_active_user(verify_otp_serializer.validated_data['email'])
         if not user or not verify_otp(user, verify_otp_serializer.validated_data['otp'], 'verify'):
-            return Response({'error': 'Invalid or expired OTP'}, status=400)
+            raise APIError('Invalid or expired OTP.',
+               hint='An OTP is valid for 5 minutes and works only once. Request a new one and try again.')
         return Response({'message': 'OTP verified'})
 
 
@@ -239,7 +301,8 @@ class ResetPasswordView(APIView):
         reset_password_serializer.is_valid(raise_exception=True)
         user = get_active_user(reset_password_serializer.validated_data['email'])
         if not user or not verify_otp(user, reset_password_serializer.validated_data['otp'], 'reset'):
-            return Response({'error': 'Invalid or expired OTP'}, status=400)
+             raise APIError('Invalid or expired OTP.',
+                           hint='An OTP is valid for 5 minutes and works only once. Request a new one and try again.')
         user.set_password(reset_password_serializer.validated_data['new_password'])
         user.save()
         return Response({'message': 'Password reset successful'})
@@ -277,15 +340,17 @@ class ProfileDetailView(APIView):
     permission_classes = [ProfileWritePermission]
 
     def get_object(self, pk):
-        try:
-            return Profile.objects.get(pk=pk)
-        except Profile.DoesNotExist:
-            return None
+        if pk < 1:
+            raise APIError(f'Profile id {pk} is not valid. IDs start from 1.',
+                           status_code=404, hint='Use GET /api/profiles/ to see valid ids.')
+        obj = Profile.objects.filter(pk=pk).first()
+        if obj is None:
+            raise APIError(f'Profile with id {pk} is not available. It was never created, or it was permanently deleted.',
+                           status_code=404, hint='Use GET /api/profiles/ to see valid ids.')
+        return obj
 
     def get(self, request, pk):
         profile = self.get_object(pk)
-        if not profile:
-            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response(ProfileSerializer(profile).data)
 
     def patch(self, request, pk):
@@ -439,10 +504,7 @@ class ClientDetailView(APIView):
     permission_classes = [ClientWritePermission]
 
     def get_object(self, pk):
-        try:
-            return Client.objects.get(pk=pk, is_active=True)
-        except Client.DoesNotExist:
-            return None
+        return fetch_active(Client, pk, 'Client', f'POST /api/clients/{pk}/restore/')
 
     def get(self, request, pk):
         client = self.get_object(pk)
@@ -529,7 +591,7 @@ class ProjectListCreateView(APIView):
     POST /api/projects/             -> Create new project (Authenticated)
     """
     permission_classes = [ProjectWritePermission]
-
+    @extend_schema(responses=ProjectSerializer(many=True))
     def get(self, request):
         if request.query_params.get('all') == 'true':
             projects = Project.objects.all().prefetch_related('attachments').order_by('-id')
@@ -541,20 +603,28 @@ class ProjectListCreateView(APIView):
         projects = apply_search(projects, request.query_params.get('search'),
                                 ['title', 'type', 'description', 'client__first_name', 'client__last_name',
                                  'assigned_manager__first_name', 'assigned_manager__last_name'])
-        for param, lookup in [('status', 'status__iexact'), ('type', 'type__iexact'),
-                              ('client', 'client_id'), ('manager', 'assigned_manager_id')]:
-            value = request.query_params.get(param)
-            if value:
-                if param in ('client', 'manager') and not value.isdigit():
-                    continue
-                projects = projects.filter(**{lookup: value})
-        has_tasks = request.query_params.get('has_tasks')         # How many tasks are there in projects
+        status_value = query_choice(request, 'status', PROJECT_STATUSES)
+        if status_value:
+            projects = projects.filter(status__iexact=status_value)
+        project_type = request.query_params.get('type')
+        if project_type:
+            projects = projects.filter(type__iexact=project_type)
+
+        client_id = query_int(request, 'client')
+        if client_id:
+            projects = projects.filter(client_id=client_id)
+        manager_id = query_int(request, 'manager')
+        if manager_id:
+            projects = projects.filter(assigned_manager_id=manager_id)
+
+        has_tasks = query_bool(request, 'has_tasks')
         if has_tasks == 'true':
             projects = projects.filter(tasks__is_active=True).distinct()
         elif has_tasks == 'false':
             projects = projects.exclude(tasks__is_active=True)
-        task_user = request.query_params.get('task_assigned_to')    # Which user has how many tasks in projects
-        if task_user and task_user.isdigit():
+
+        task_user = query_int(request, 'task_assigned_to')
+        if task_user:
             projects = projects.filter(tasks__assigned_to_id=task_user, tasks__is_active=True).distinct()
         
         paginator = PageNumberPagination()
@@ -562,7 +632,8 @@ class ProjectListCreateView(APIView):
         page = paginator.paginate_queryset(projects, request)
         serializer = ProjectSerializer(page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
-
+    
+    @extend_schema(request=ProjectSerializer, responses=ProjectSerializer)
     def post(self, request):
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -584,10 +655,7 @@ class ProjectDetailView(APIView):
     permission_classes = [ProjectWritePermission]
 
     def get_object(self, pk):
-        try:
-            return Project.objects.get(pk=pk, is_active=True)
-        except Project.DoesNotExist:
-            return None
+        return fetch_active(Project, pk, 'Project', f'POST /api/projects/{pk}/restore/')
 
     def get(self, request, pk):
         project = self.get_object(pk)
@@ -597,6 +665,7 @@ class ProjectDetailView(APIView):
                             project, context={'request': request, 'include_attachments': True}
                          ).data)
 
+    @extend_schema(request=ProjectSerializer, responses=ProjectSerializer)
     def patch(self, request, pk):
         project = self.get_object(pk)
         if not project:
@@ -655,7 +724,7 @@ class ProjectTaskListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_project(self, project_id):
-        return Project.objects.filter(pk=project_id, is_active=True).first()
+        return fetch_active(Project, project_id, 'Project', f'POST /api/projects/{project_id}/restore/')
 
     def get(self, request, project_id):
         project = self.get_project(project_id)
@@ -672,14 +741,14 @@ class ProjectTaskListCreateView(APIView):
 
         tasks = apply_search(tasks, request.query_params.get('search'),
                              ['title', 'description', 'assigned_to__first_name', 'assigned_to__last_name'])
-        status_value = request.query_params.get('status')
+        status_value = query_choice(request, 'status', TASK_STATUSES)
         if status_value:
             tasks = tasks.filter(status__iexact=status_value)
-        priority = request.query_params.get('priority')
+        priority = query_choice(request, 'priority', TASK_PRIORITIES)
         if priority:
             tasks = tasks.filter(priority__iexact=priority)
-        assigned = request.query_params.get('assigned_to')
-        if assigned and assigned.isdigit():
+        assigned = query_int(request, 'assigned_to')
+        if assigned:
             tasks = tasks.filter(assigned_to_id=assigned)
 
         paginator = PageNumberPagination()
@@ -722,7 +791,7 @@ class TaskListView(APIView):
         else:
             tasks = tasks.filter(is_active=True)
 
-        sees_all = request.user.is_superuser or role_of(request.user) in ('Super Admin', 'Admin', 'Manager', 'Team Leader')
+        sees_all = role_of(request.user) in ('Super Admin', 'Admin', 'Manager', 'Team Leader')
         if sees_all:
             assigned = request.query_params.get('assigned_to')
             if assigned == 'me':
@@ -734,11 +803,16 @@ class TaskListView(APIView):
 
         tasks = apply_search(tasks, request.query_params.get('search'),
                              ['title', 'description', 'project__title'])
-        for param, lookup in [('status', 'status__iexact'), ('priority', 'priority__iexact'), ('project', 'project_id')]:
-            value = request.query_params.get(param)
-            if value and not (param == 'project' and not value.isdigit()):
-                tasks = tasks.filter(**{lookup: value})
-
+         
+        status_value = query_choice(request, 'status', TASK_STATUSES)
+        if status_value:
+            tasks = tasks.filter(status__iexact=status_value)
+        priority = query_choice(request, 'priority', TASK_PRIORITIES)
+        if priority:
+            tasks = tasks.filter(priority__iexact=priority)
+        project_id = query_int(request, 'project')
+        if project_id:
+            tasks = tasks.filter(project_id=project_id)
         paginator = PageNumberPagination()
         paginator.page_size = 10
         page = paginator.paginate_queryset(tasks, request)
@@ -755,7 +829,7 @@ class ProjectTaskDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk):
-        return ProjectTask.objects.filter(pk=pk, is_active=True).select_related('project', 'assigned_to').first()
+        return fetch_active(ProjectTask, pk, 'Task', f'PUT /api/tasks/{pk}/activate/')
 
     def get(self, request, pk):
         task = self.get_object(pk)
@@ -838,7 +912,7 @@ class TaskCommentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_task(self, task_id):
-        return ProjectTask.objects.filter(pk=task_id, is_active=True).first()
+        return fetch_active(ProjectTask, task_id, 'Task', f'PUT /api/tasks/{task_id}/activate/')
 
     def get(self, request, task_id):
         task = self.get_task(task_id)
@@ -872,7 +946,7 @@ class TaskCommentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk):
-        return TaskComment.objects.filter(pk=pk, is_active=True).select_related('user', 'task').first()
+        return fetch_active(TaskComment, pk, 'Comment')
 
     def get(self, request, pk):
         comment = self.get_object(pk)

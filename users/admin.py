@@ -2,7 +2,13 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import User, Client, Project, Profile, ProjectAttachment, ProjectTask, TaskComment
 
-admin.site.register(User, UserAdmin)
+class CustomUserAdmin(UserAdmin):
+    list_display = ('id', 'username', 'email', 'profiles', 'status', 'is_staff')
+    fieldsets = UserAdmin.fieldsets + (
+        ('Extra info', {'fields': ('profiles', 'status')}),
+    )
+
+admin.site.register(User, CustomUserAdmin)
 
 
 @admin.register(Client)

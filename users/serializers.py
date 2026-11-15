@@ -8,19 +8,68 @@ import os
 from django.db import transaction
 from django.utils import timezone
 
+import re
+import difflib
+
+PROFILE_NAME_PATTERN = re.compile(r'^(?=.*[A-Za-z])[A-Za-z0-9 _&.+/()-]+$')
+def clean_profile_name(value):
+    value = ' '.join(str(value).split())
+    if not value:
+        raise serializers.ValidationError('Profile name cannot be blank.')
+    if len(value) < 2:
+        raise serializers.ValidationError('Profile name must be at least 2 characters long.')
+    if len(value) > 50:
+        raise serializers.ValidationError('Profile name cannot be more than 50 characters.')
+    if not PROFILE_NAME_PATTERN.match(value):
+        raise serializers.ValidationError(
+            "Profile name must contain at least one letter and can use only letters, numbers, "
+            "spaces and these symbols: - _ & . + / ( ). Example: 'Team Leader'."
+        )
+    return value
+
+class SuggestFieldsMixin:
+    """Galat field naam par error nahi, 'Did you mean ...' warning deta hai."""
+
+    def to_internal_value(self, data):
+        self._warnings = []
+        if hasattr(data, 'keys'):
+            for key in data.keys():
+                if key not in self.fields:
+                    close = difflib.get_close_matches(key, list(self.fields), n=1, cutoff=0.6)
+                    msg = f"Unknown field '{key}' was ignored."
+                    msg += f" Did you mean '{close[0]}'?" if close else " This endpoint does not accept it."
+                    self._warnings.append(msg)
+        return super().to_internal_value(data)
+
+    def save(self, **kwargs):
+        instance = super().save(**kwargs)
+        instance._warnings = getattr(self, '_warnings', [])
+        return instance
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        warnings = getattr(instance, '_warnings', None)
+        if warnings:
+            ret['warnings'] = warnings
+        return ret
+
 
 class DynamicProfileField(serializers.SlugRelatedField):
-    """If the profile does not exist in the database, it will create the profile automatically."""
+    """Finds an existing profile by name. Unknown names are rejected."""
     def to_internal_value(self, data):
-      profile_name = str(data).strip()
-      if not profile_name:
-         raise serializers.ValidationError('Profile cannot be blank.')       
-      profile = Profile.objects.filter(name__iexact=profile_name).first()
-      if not profile :
-        profile = Profile.objects.create(name=profile_name)   # is_default=False, delete ho sakta h   ai
-      return profile
+        if isinstance(data, bool) or not isinstance(data, (str, int, float)):
+            raise serializers.ValidationError('Profile must be text, for example "Manager".')
+        profile_name = clean_profile_name(data)
+        profile = Profile.objects.filter(name__iexact=profile_name).first()
+        if not profile:
+            allowed = ', '.join(Profile.objects.order_by('name').values_list('name', flat=True))
+            raise serializers.ValidationError(
+                f"Profile '{profile_name}' does not exist. Available profiles: {allowed}. "
+                f"Create a new one first with POST /api/profiles/."
+            )
+        return profile
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     profiles = DynamicProfileField(
         slug_field='name',
         queryset=Profile.objects.all(),
@@ -74,6 +123,9 @@ class UserSerializer(serializers.ModelSerializer):
         return ret
 
     def to_internal_value(self, data):
+        if not hasattr(data, 'keys'):
+            raise serializers.ValidationError(
+                {'non_field_errors': ['Send a JSON object, for example {"email": "user@example.com"}.']})
         # 1. We create a copy of the request data so that we can modify it without affecting the original data
         data = data.copy()
 
@@ -228,7 +280,7 @@ class ResetPasswordSerializer(serializers.Serializer):
 # ==========================================
 # PROFILE SERIALIZER
 # ==========================================
-class ProfileSerializer(serializers.ModelSerializer):
+class ProfileSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ['id', 'name', 'is_default', 'created_at']
@@ -243,9 +295,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         }
 
     def validate_name(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError('Profile name cannot be blank.')
+        value = clean_profile_name(value)
         qs = Profile.objects.filter(name__iexact=value)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
@@ -253,7 +303,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Profile with this name already exists.')
         return value
 
-class ClientSerializer(serializers.ModelSerializer):
+class ClientSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     updated_by = serializers.SerializerMethodField()
     deleted_by = serializers.SerializerMethodField()
@@ -344,7 +394,7 @@ class ClientRelatedField(serializers.PrimaryKeyRelatedField):
         self.fail('incorrect_type', data_type=type(data).__name__)
 
 
-class ProjectSerializer(serializers.ModelSerializer):
+class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     updated_by = serializers.SerializerMethodField()
     deleted_by = serializers.SerializerMethodField()
@@ -437,13 +487,15 @@ class ProjectSerializer(serializers.ModelSerializer):
     def validate_assigned_manager(self, user):
         if user is None:
             return user
+        if not user.is_active or user.status != 'Active':
+            raise serializers.ValidationError(
+                f"User {user.id} ({user.email}) is inactive (deleted). Restore the user with "
+                f"PUT /api/users/{user.id}/restore/ or choose another active Manager.")
         role = user.profiles.name if user.profiles else None
         if role != 'Manager':
             raise serializers.ValidationError(
-                "Only a user with the 'Manager' profile can be assigned to a project."
-            )
-        if not user.is_active or user.status != 'Active':
-            raise serializers.ValidationError("Assigned manager must be an active user.")
+                f"User {user.id} ({user.email}) has the profile '{role or 'none'}'. "
+                f"Only a user with the 'Manager' profile can be assigned to a project.")
         return user
 
     def validate_title(self, value):
@@ -481,11 +533,22 @@ class ProjectSerializer(serializers.ModelSerializer):
         remove_ids = validated_data.pop('remove_attachment_ids', [])
         project = super().update(instance, validated_data)
 
-        for att in project.attachments.filter(id__in=remove_ids):
+        to_remove = {a.id: a for a in project.attachments.filter(id__in=remove_ids)}
+        project._removed = [{'id': a.id, 'file_name': a.file_name} for a in to_remove.values()]
+        for att in to_remove.values():
             att.file.delete(save=False)
             att.delete()
 
         self._save_files(project, files)
+        project._added = [f.name for f in files]
+
+        missing = [i for i in remove_ids if i not in to_remove]
+        if missing:
+            current = list(project.attachments.values_list('id', flat=True))
+            self._warnings.append(
+                f"Attachment id(s) {missing} not found in this project. The file may already "
+                f"have been removed, or the id is wrong. Current attachment ids: {current or 'none'}."
+            )
         return project
 
     
@@ -505,6 +568,11 @@ class ProjectSerializer(serializers.ModelSerializer):
         # List me files ki poori list mat bhejo, sirf detail me bhejo
         if not self.context.get('include_attachments'):
             ret.pop('attachments', None)
+        if getattr(instance, '_removed', None):
+            ret['removed_attachments'] = instance._removed
+            ret['note'] = 'Removed attachments are permanently deleted and cannot be restored.'
+        if getattr(instance, '_added', None):
+            ret['added_files'] = instance._added
         return ret
 
 # ==========================================
@@ -548,7 +616,7 @@ def _user_summary(user):
     }
 
 
-class TaskCommentSerializer(serializers.ModelSerializer):
+class TaskCommentSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = TaskComment
         fields = ['id', 'task', 'user', 'comment', 'hours_spent', 'created_at', 'updated_at']
@@ -569,7 +637,7 @@ class TaskCommentSerializer(serializers.ModelSerializer):
         return ret
 
 
-class ProjectTaskSerializer(serializers.ModelSerializer):
+class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     updated_by = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
@@ -607,13 +675,15 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
     def validate_assigned_to(self, user):
         if user is None:
             return user
+        if not user.is_active or user.status != 'Active':
+            raise serializers.ValidationError(
+                f"User {user.id} ({user.email}) is inactive (deleted). Restore the user with "
+                f"PUT /api/users/{user.id}/restore/ or choose another active user.")
         role = user.profiles.name if user.profiles else None
         if role not in ('Team Leader', 'Developer'):
             raise serializers.ValidationError(
-                "Only a user with the 'Team Leader' or 'Developer' profile can be assigned to a task."
-            )
-        if not user.is_active or user.status != 'Active':
-            raise serializers.ValidationError("Assigned user must be an active user.")
+                f"User {user.id} ({user.email}) has the profile '{role or 'none'}'. "
+                f"Only a 'Team Leader' or 'Developer' can be assigned to a task.")
         return user
 
     def validate_title(self, value):

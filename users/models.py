@@ -6,7 +6,7 @@ class Profile(models.Model):
     is_default = models.BooleanField(default=False)   # True = system profile, delete nahi hoga
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
-        return self.name
+        return self.name or ""
 
 
 class User(AbstractUser):

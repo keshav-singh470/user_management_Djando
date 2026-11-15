@@ -15,7 +15,12 @@ class RoleWritePermission(BasePermission):
             return False
         if request.method in SAFE_METHODS:
             return True
-        return user.is_superuser or role_of(user) in self.write_roles
+        role = role_of(user)
+        if role in self.write_roles:
+            return True
+        self.message = (f"Your role ({role or 'no role assigned'}) cannot {request.method} this resource. "
+                        f"Allowed roles: {', '.join(self.write_roles)}.")
+        return False
 
 
 class UserWritePermission(RoleWritePermission):

@@ -129,10 +129,23 @@ REST_FRAMEWORK = {
     # We don't need to create pagination functions separately for every new app.
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
+    'EXCEPTION_HANDLER': 'users.exceptions.custom_exception_handler',
 }
 
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}
+
+# Swagger / API docs
+INSTALLED_APPS += ['drf_spectacular']
+
+REST_FRAMEWORK['DEFAULT_SCHEMA_CLASS'] = 'drf_spectacular.openapi.AutoSchema'
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Project Management API',
+    'DESCRIPTION': 'Users, Profiles, Clients, Projects, Tasks and Comments with role-based access.',
+    'VERSION': '1.0.0',
+    'COMPONENT_SPLIT_REQUEST': True,   # file upload wale form-data ke liye zaroori
 }
