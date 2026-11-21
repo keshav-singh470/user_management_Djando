@@ -23,6 +23,19 @@ class Command(BaseCommand):
         if not profile:
             raise CommandError("Profile 'Super Admin' not found. Run migrations first.")
 
+        # A user with this email may already exist (for example created by
+        # createsuperuser without a profile): promote it and reset its password.
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
+            user.profiles = profile
+            user.is_staff = True
+            user.is_superuser = True
+            user.is_active = True
+            user.set_password(password)
+            user.save()
+            self.stdout.write(self.style.SUCCESS(f"Existing user promoted to Super Admin: {email}"))
+            return
+
         User.objects.create_superuser(
             username=email, email=email, password=password, profiles=profile
         )
