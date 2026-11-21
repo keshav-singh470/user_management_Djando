@@ -22,6 +22,10 @@ urlpatterns = [
     path('profiles/', views.ProfileListCreateView.as_view()),
     path('profiles/<int:pk>/', views.ProfileDetailView.as_view()),
 
+    # Lookup endpoints (project type, project status, task status)
+    path('lookups/', views.LookupListCreateView.as_view()),
+    path('lookups/<int:pk>/', views.LookupDetailView.as_view()),
+
     # Client endpoints (APIView)
     path('clients/', views.ClientListCreateView.as_view()),
     path('clients/<int:pk>/', views.ClientDetailView.as_view()),

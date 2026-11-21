@@ -8,11 +8,15 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Production mein SECRET_KEY Render ke environment variable se aayegi
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-only-change-me')
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-# Local par True rahega. Render par DEBUG=False variable set karna hai.
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+# In production SECRET_KEY must come from the environment.
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-only-change-me'
+    else:
+        raise RuntimeError('SECRET_KEY environment variable is required.')
 
 ALLOWED_HOSTS = ['.onrender.com', 'localhost', '127.0.0.1']
 CSRF_TRUSTED_ORIGINS = ['https://*.onrender.com']
@@ -78,8 +82,21 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-
-
+# OTP codes, OTP request limits and throttling are stored in the cache.
+# Production uses Redis (shared by all workers, keys expire by themselves).
+# Without REDIS_URL (local development) a simple in-memory cache is used.
+REDIS_URL = os.getenv('REDIS_URL')
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}
+    }
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -106,7 +123,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # Email configuration for Gmail SMTP
-EMAIL_BACKEND = EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
@@ -137,6 +154,11 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
+REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] = [
+    'rest_framework.throttling.AnonRateThrottle',
+    'rest_framework.throttling.UserRateThrottle',
+]
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {'anon': '60/min', 'user': '300/min'}
 
 # Swagger / API docs
 INSTALLED_APPS += ['drf_spectacular']
@@ -149,3 +171,10 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'COMPONENT_SPLIT_REQUEST': True,   # file upload wale form-data ke liye zaroori
 }
+
+# Production-only security settings
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_REDIRECT_EXEMPT = [r'^api/health/$']
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

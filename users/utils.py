@@ -92,15 +92,16 @@ def _send_project_mail(subject, body, to_email):
 
 def send_project_created_emails(project):
     manager = project.assigned_manager
-    client = project.client
+    client = project.client          # ab ye User hai (Client profile wala)
+    status_name = project.status.name if project.status else '-'
     base = (
         f"Project     : {project.title}\n"
-        f"Status      : {project.status}\n"
+        f"Status      : {status_name}\n"
         f"Description : {project.description or '-'}\n"
     )
 
     # 1) Client ko mail (project details + manager ki jaankari)
-    if client and client.email_id:
+    if client and client.email:
         if manager:
             manager_info = f"Manager     : {_full_name(manager)} ({manager.email}, {manager.phone or '-'})\n"
         else:
@@ -109,15 +110,14 @@ def send_project_created_emails(project):
             f"New project created: {project.title}",
             f"Hello {client.first_name or 'Client'},\n\nA new project has been created for you.\n\n"
             f"{base}{manager_info}\nRegards,\nTeam",
-            client.email_id,
+            client.email,
         )
 
     # 2) Manager ko mail (project details + client ki jaankari)
     if manager and manager.email:
         if client:
             client_info = (
-                f"Client      : {client.first_name or ''} {client.last_name or ''}".strip()
-                + f" ({client.email_id or '-'}, {client.contact_no or '-'})\n"
+                f"Client      : {_full_name(client)} ({client.email or '-'}, {client.phone or '-'})\n"
             )
         else:
             client_info = "Client      : Not assigned\n"

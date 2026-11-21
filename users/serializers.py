@@ -1,6 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import User, Client, Profile, Project, ProjectAttachment, ProjectTask, TaskComment
+from .models import User, Client, Profile, Project, ProjectAttachment, ProjectTask, TaskComment, LookupValue
 from django.core.cache import cache
 from django.db.models import Q
 
@@ -10,6 +10,7 @@ from django.utils import timezone
 
 import re
 import difflib
+from .permissions import role_of
 
 PROFILE_NAME_PATTERN = re.compile(r'^(?=.*[A-Za-z])[A-Za-z0-9 _&.+/()-]+$')
 def clean_profile_name(value):
@@ -55,10 +56,19 @@ class SuggestFieldsMixin:
 
 
 class DynamicProfileField(serializers.SlugRelatedField):
-    """Finds an existing profile by name. Unknown names are rejected."""
+    """Finds an existing profile by id (7) or by name ("Manager"). Unknown values are rejected."""
     def to_internal_value(self, data):
         if isinstance(data, bool) or not isinstance(data, (str, int, float)):
-            raise serializers.ValidationError('Profile must be text, for example "Manager".')
+            raise serializers.ValidationError('Profile must be a profile id (for example 7) or a name (for example "Manager").')
+
+        if isinstance(data, int) or (isinstance(data, str) and data.strip().isdigit()):
+            profile = Profile.objects.filter(pk=int(data)).first()
+            if not profile:
+                allowed = ', '.join(f'{p.id}={p.name}' for p in Profile.objects.order_by('id'))
+                raise serializers.ValidationError(
+                    f"Profile with id {data} does not exist. Available profiles: {allowed}.")
+            return profile
+
         profile_name = clean_profile_name(data)
         profile = Profile.objects.filter(name__iexact=profile_name).first()
         if not profile:
@@ -69,6 +79,85 @@ class DynamicProfileField(serializers.SlugRelatedField):
             )
         return profile
 
+def suggest_value(value, options):
+    """Closest match (case-insensitive) ya None."""
+    lowered = {str(o).lower(): o for o in options}
+    close = difflib.get_close_matches(str(value).lower(), list(lowered), n=1, cutoff=0.6)
+    return lowered[close[0]] if close else None
+
+
+LOOKUP_LABELS = {'project_type': 'project type', 'project_status': 'project status',
+                 'task_status': 'task status'}
+
+
+class LookupField(serializers.SlugRelatedField):
+    """Value ko naam se dhundhta hai (case-insensitive). Galat naam par 'Did you mean...' dikhata hai."""
+
+    def __init__(self, category, **kwargs):
+        self.category = category
+        kwargs['slug_field'] = 'name'
+        kwargs['queryset'] = LookupValue.objects.filter(category=category)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        if isinstance(data, bool) or not isinstance(data, str):
+            raise serializers.ValidationError('Value must be text, for example "In Progress".')
+        name = ' '.join(data.split())
+        if not name:
+            raise serializers.ValidationError('This field cannot be blank.')
+        obj = self.get_queryset().filter(name__iexact=name).first()
+        if not obj:
+            names = list(self.get_queryset().values_list('name', flat=True))
+            msg = f"'{name}' is not a valid {LOOKUP_LABELS.get(self.category, 'value')}."
+            close = suggest_value(name, names)
+            if close:
+                msg += f" Did you mean '{close}'?"
+            msg += (f" Available: {', '.join(names) or 'none'}. "
+                    f"An Admin can add a new one with POST /api/lookups/.")
+            raise serializers.ValidationError(msg)
+        return obj
+
+
+def default_lookup(category, name='Pending'):
+    """Request mein status na ho to ye default value lagegi."""
+    return LookupValue.objects.filter(category=category, name=name).first()
+
+
+class LookupValueSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = LookupValue
+        fields = ['id', 'category', 'name', 'is_default', 'created_at']
+        read_only_fields = ['id', 'is_default', 'created_at']
+        extra_kwargs = {
+            'category': {'required': True, 'error_messages': {'required': 'Category is required.'}},
+            'name': {'required': True, 'allow_blank': False,
+                     'error_messages': {'required': 'Name is required.'}},
+        }
+
+    def validate_category(self, value):
+        if self.instance and value != self.instance.category:
+            raise serializers.ValidationError('Category cannot be changed.')
+        return value
+
+    def validate_name(self, value):
+        value = ' '.join(value.split())
+        if len(value) < 2 or len(value) > 100:
+            raise serializers.ValidationError('Name must be between 2 and 100 characters.')
+        if not re.search(r'[A-Za-z]', value):
+            raise serializers.ValidationError('Name must contain at least one letter.')
+        return value
+
+    def validate(self, attrs):
+        category = attrs.get('category', self.instance.category if self.instance else None)
+        name = attrs.get('name', self.instance.name if self.instance else None)
+        if category and name:
+            qs = LookupValue.objects.filter(category=category, name__iexact=name)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({'name': f"'{name}' already exists in this category."})
+        return attrs
+
 class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     profiles = DynamicProfileField(
         slug_field='name',
@@ -76,6 +165,22 @@ class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    created_by = serializers.SerializerMethodField()
+    modified_by = serializers.SerializerMethodField()
+    deleted_by = serializers.SerializerMethodField()
+    restored_by = serializers.SerializerMethodField()
+
+    def get_created_by(self, obj):
+        return _user_summary(obj.created_by)
+
+    def get_modified_by(self, obj):
+        return _user_summary(obj.modified_by)
+
+    def get_deleted_by(self, obj):
+        return _user_summary(obj.deleted_by)
+
+    def get_restored_by(self, obj):
+        return _user_summary(obj.restored_by)
  
     class Meta:
         model = User
@@ -84,9 +189,11 @@ class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
             'date_of_birth', 'gender', 'nationality', 'image', 'blood_group',
             'phone', 'permanent_address', 'current_address',
             'emergency_contact_name', 'emergency_contact_number',
-            'emergency_contact_relationship', 'status',
+            'emergency_contact_relationship', 'status','company_name',
+            'created_at', 'created_by', 'modified_at', 'modified_by',
+            'deleted_at', 'deleted_by', 'restored_at', 'restored_by',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'created_at', 'modified_at', 'deleted_at', 'restored_at']
         # We will handle the required validation here instead of in the model.
         extra_kwargs = {
             'email': {
@@ -107,6 +214,14 @@ class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
             },
         }
    
+    def validate(self, attrs):
+        if self.instance:
+            profile = attrs.get('profiles', self.instance.profiles)
+            company = attrs.get('company_name', self.instance.company_name)
+            if profile and profile.name.lower() == 'client' and not (company or '').strip():
+                raise serializers.ValidationError({'company_name': 'Company name is required for a Client.'})
+        return attrs
+        
     def validate_email(self, value):       #Duplicate email check
         value = value.strip()
         qs = User.objects.filter(email__iexact=value)
@@ -120,6 +235,11 @@ class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         ret = super().to_representation(instance)
         profile = instance.profiles
         ret['profiles'] = {"id": profile.id, "name": profile.name} if profile else None
+        for field in ('deleted_at', 'deleted_by', 'restored_at', 'restored_by', 'modified_by'):
+            if ret.get(field) is None:
+                ret.pop(field, None)
+        if not instance.modified_by:
+            ret.pop('modified_at', None)      # not modified yet, so do not show it
         return ret
 
     def to_internal_value(self, data):
@@ -193,6 +313,9 @@ class UserCreateSerializer(UserSerializer):
             raise serializers.ValidationError(
                 {field: "A user with this username already exists."}
             )
+        profile = attrs.get('profiles')
+        if profile and profile.name.lower() == 'client' and not (attrs.get('company_name') or '').strip():
+            raise serializers.ValidationError({'company_name': 'Company name is required for a Client.'})
         return attrs
 
     def create(self, validated_data):
@@ -305,13 +428,13 @@ class ProfileSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
 
 class ClientSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
-    updated_by = serializers.SerializerMethodField()
+    modified_by = serializers.SerializerMethodField()
     deleted_by = serializers.SerializerMethodField()
     restored_by = serializers.SerializerMethodField()
     class Meta:
         model = Client
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by', 'is_active']
+        read_only_fields = ['id', 'created_at', 'modified_at', 'deleted_at', 'created_by', 'modified_by', 'deleted_by', 'restored_at', 'restored_by', 'is_active']
         # Client-required fields
         extra_kwargs = {
             'first_name': {
@@ -334,8 +457,8 @@ class ClientSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def get_created_by(self, obj):
         return self._format_user(obj.created_by)
 
-    def get_updated_by(self, obj):
-        return self._format_user(obj.updated_by)
+    def get_modified_by(self, obj):
+        return self._format_user(obj.modified_by)
 
     def get_deleted_by(self, obj):
         return self._format_user(obj.deleted_by)
@@ -346,13 +469,13 @@ class ClientSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         # 1. Remove the fields that have null values from the response.
-        for field in ['deleted_at', 'deleted_by', 'updated_by', 'restored_at', 'restored_by']:
+        for field in ['deleted_at', 'deleted_by', 'modified_by', 'restored_at', 'restored_by']:
             if ret.get(field) is None:
                 ret.pop(field, None)
         
-        # If the record has not been updated yet, do not display updated_at
-        if not instance.updated_by:
-            ret.pop('updated_at', None)
+        # If the record has not been updated yet, do not display modified_at
+        if not instance.modified_by:
+            ret.pop('modified_at', None)
 
         return ret
 
@@ -376,7 +499,7 @@ class ManagerRelatedField(serializers.PrimaryKeyRelatedField):
 
         self.fail('incorrect_type', data_type=type(data).__name__)
 
-class ClientRelatedField(serializers.PrimaryKeyRelatedField):         
+class ClientRelatedField(serializers.PrimaryKeyRelatedField):          # old client class 
     """Accepts only a unique value: client ID (7) or client email (client@example.com)."""
     def to_internal_value(self, data):
         if isinstance(data, int) or (isinstance(data, str) and data.isdigit()):
@@ -396,7 +519,7 @@ class ClientRelatedField(serializers.PrimaryKeyRelatedField):
 
 class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
-    updated_by = serializers.SerializerMethodField()
+    modified_by = serializers.SerializerMethodField()
     deleted_by = serializers.SerializerMethodField()
     restored_by = serializers.SerializerMethodField()
     attachments = serializers.SerializerMethodField()
@@ -422,22 +545,19 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         required=False, 
         allow_null=True
     )
-    client = ClientRelatedField(
-        queryset=Client.objects.filter(is_active=True),
-        required=False,
-        allow_null=True
-    )
+    client = ManagerRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    
+    type = LookupField(category='project_type', required=True, allow_null=False,
+                       error_messages={'required': 'Project type is required.'})
+    status = LookupField(category='project_status', required=False)
 
     class Meta:
         model = Project
         fields = '__all__'
-        read_only_fields = ['id', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by', 'deleted_by', 'restored_at', 'restored_by']
+        read_only_fields = ['id', 'is_active', 'created_at', 'modified_at', 'deleted_at', 'created_by', 'modified_by', 'deleted_by', 'restored_at', 'restored_by']
         extra_kwargs = {
             'title': {'required': True, 'allow_blank': False, 'allow_null': False,
                         'error_messages': {'required': 'Project title is required.'}},
-            'type': {'required': True, 'allow_blank': False, 'allow_null': False,
-                        'error_messages': {'required': 'Project type is required.'}},
-            'client': {'required': False, 'allow_null': True},
         }
 
     def _format_user(self, user):
@@ -451,8 +571,9 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
             "id": client.id,
             "first_name": client.first_name,
             "last_name": client.last_name,
-            "email": client.email_id,
-            "contact_no": client.contact_no,
+            "email": client.email,
+            "company_name": client.company_name,
+            "phone": client.phone,
         }
 
     def get_created_by(self, obj):
@@ -461,8 +582,8 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def get_restored_by(self, obj):
         return self._format_user(obj.restored_by)
 
-    def get_updated_by(self, obj):
-        return self._format_user(obj.updated_by)
+    def get_modified_by(self, obj):
+        return self._format_user(obj.modified_by)
 
     def get_deleted_by(self, obj):
         return self._format_user(obj.deleted_by)
@@ -498,6 +619,20 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
                 f"Only a user with the 'Manager' profile can be assigned to a project.")
         return user
 
+    def validate_client(self, user):
+        if user is None:
+            return user
+        if not user.is_active or user.status != 'Active':
+            raise serializers.ValidationError(
+                f"User {user.id} ({user.email}) is inactive (deleted). Restore the user with "
+                f"PUT /api/users/{user.id}/restore/ or choose another client.")
+        role = user.profiles.name if user.profiles else None
+        if role != 'Client':
+            raise serializers.ValidationError(
+                f"User {user.id} ({user.email}) has the profile '{role or 'none'}'. "
+                f"Only a user with the 'Client' profile can be set as the project client.")
+        return user
+
     def validate_title(self, value):
         value = value.strip()
         qs = Project.objects.filter(title__iexact=value)
@@ -509,20 +644,15 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
 
 
     def _save_files(self, project, files):
-        request = self.context.get('request')
-        user = request.user if request else None
         for f in files:
-            ProjectAttachment.objects.create(
-                project=project,
-                file=f,
-                file_name=f.name,
-                 
-            )
+            ProjectAttachment.objects.create(project=project, file=f, file_name=f.name)
 
     @transaction.atomic
     def create(self, validated_data):
         files = validated_data.pop('uploaded_files', [])
         validated_data.pop('remove_attachment_ids', None)
+        if validated_data.get('status') is None:
+            validated_data['status'] = default_lookup('project_status')   # default: Pending
         project = super().create(validated_data)
         self._save_files(project, files)
         return project
@@ -559,12 +689,15 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         # Format client in response like created_by
         ret['client'] = self._format_client(instance.client)
         ret['assigned_manager'] = self._format_user(instance.assigned_manager)
+        if _is_client(self):
+            for field in ('created_by', 'modified_by', 'deleted_by', 'restored_by'):
+                ret.pop(field, None)
         # Do not include null audit fields in the response.
-        for field in ['deleted_at', 'deleted_by', 'updated_by', 'restored_at', 'restored_by']:
+        for field in ['deleted_at', 'deleted_by', 'modified_by', 'restored_at', 'restored_by']:
             if ret.get(field) is None:
                 ret.pop(field, None)
-        if not instance.updated_by:
-            ret.pop('updated_at', None)
+        if not instance.modified_by:
+            ret.pop('modified_at', None)
         # List me files ki poori list mat bhejo, sirf detail me bhejo
         if not self.context.get('include_attachments'):
             ret.pop('attachments', None)
@@ -604,6 +737,10 @@ class ProjectAttachmentSerializer(serializers.ModelSerializer):
 # PROJECT TASK + COMMENT SERIALIZERS
 # ==========================================
 
+def _is_client(serializer):
+    request = serializer.context.get('request')
+    return bool(request and role_of(request.user) == 'Client')
+
 def _user_summary(user):
     if not user:
         return None
@@ -619,8 +756,8 @@ def _user_summary(user):
 class TaskCommentSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = TaskComment
-        fields = ['id', 'task', 'user', 'comment', 'hours_spent', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'task', 'user', 'created_at', 'updated_at']
+        fields = ['id', 'task', 'user', 'comment', 'hours_spent', 'created_at', 'modified_at']
+        read_only_fields = ['id', 'task', 'user', 'created_at', 'modified_at']
         extra_kwargs = {'comment': {'required': True, 'allow_blank': False, 'allow_null': False,
                             'error_messages': {'required': 'Comment is required.'}}}
 
@@ -632,25 +769,26 @@ class TaskCommentSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         ret['user'] = _user_summary(instance.user)
-        if (instance.updated_at - instance.created_at).total_seconds() < 1:
-            ret.pop('updated_at', None)
+        if not instance.modified_at or (instance.modified_at - instance.created_at).total_seconds() < 1:
+            ret.pop('modified_at', None)
         return ret
 
 
 class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
-    updated_by = serializers.SerializerMethodField()
+    modified_by = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
     comments_count = serializers.SerializerMethodField()
 
     # id ya email se user assign hoga (ManagerRelatedField ki tarah)
     assigned_to = ManagerRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    status = LookupField(category='task_status', required=False)
 
     class Meta:
         model = ProjectTask
         fields = '__all__'
-        read_only_fields = ['id', 'project', 'is_active', 'completion_date', 'created_at', 'updated_at',
-                    'created_by', 'updated_by']
+        read_only_fields = ['id', 'project', 'is_active', 'completion_date', 'created_at', 'modified_at',
+                    'created_by', 'modified_by','deleted_at', 'deleted_by']
         extra_kwargs = {
             'title': {'required': True, 'allow_blank': False, 'allow_null': False,
                               'error_messages': {'required': 'Task title is required.'}},
@@ -663,8 +801,8 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def get_created_by(self, obj):
         return _user_summary(obj.created_by)
 
-    def get_updated_by(self, obj):
-        return _user_summary(obj.updated_by)
+    def get_modified_by(self, obj):
+        return _user_summary(obj.modified_by)
 
     def get_comments(self, obj):
         return TaskCommentSerializer(obj.comments.filter(is_active=True), many=True).data
@@ -709,14 +847,16 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        validated_data['status'] = 'Pending'          # create par hamesha Pending
+        validated_data['status'] = default_lookup('task_status')   # create par hamesha Pending
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        new_status = validated_data.get('status', instance.status)
-        if new_status == 'Completed' and instance.status != 'Completed':
+        old_name = instance.status.name if instance.status else None
+        new_obj = validated_data.get('status', instance.status)
+        new_name = new_obj.name if new_obj else None
+        if new_name == 'Completed' and old_name != 'Completed':
             validated_data['completion_date'] = timezone.localdate()
-        elif new_status != 'Completed' and instance.status == 'Completed':
+        elif new_name != 'Completed' and old_name == 'Completed':
             validated_data['completion_date'] = None
         return super().update(instance, validated_data)
 
@@ -724,11 +864,16 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         ret = super().to_representation(instance)
         ret['project'] = {"id": instance.project.id, "title": instance.project.title}
         ret['assigned_to'] = _user_summary(instance.assigned_to)
-        for field in ['updated_by']:
+        if _is_client(self):
+            for field in ('comments', 'comments_count', 'estimated_hours', 'created_by', 'modified_by'):
+                ret.pop(field, None)
+            if ret.get('assigned_to'):
+                ret['assigned_to'] = {k: ret['assigned_to'][k] for k in ('id', 'first_name', 'last_name')}
+        for field in ['modified_by']:
             if ret.get(field) is None:
                 ret.pop(field, None)
-        if not instance.updated_by:
-            ret.pop('updated_at', None)
+        if not instance.modified_by:
+            ret.pop('modified_at', None)
         if not self.context.get('include_comments'):
             ret.pop('comments', None)
         return ret

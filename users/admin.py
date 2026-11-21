@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Client, Project, Profile, ProjectAttachment, ProjectTask, TaskComment
+from .models import User, Client, Project, Profile, ProjectAttachment, ProjectTask, TaskComment, LookupValue
 
 class CustomUserAdmin(UserAdmin):
     list_display = ('id', 'username', 'email', 'profiles', 'status', 'is_staff')
@@ -15,11 +15,11 @@ admin.site.register(User, CustomUserAdmin)
 class ClientAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'first_name', 'last_name', 'email_id', 'contact_no',
-        'countries', 'is_active', 'created_at', 'updated_at',
+        'countries', 'is_active', 'created_at', 'modified_at',
     )
     list_filter = ('is_active', 'countries', 'created_at')
     search_fields = ('first_name', 'last_name', 'email_id', 'contact_no')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'modified_at')
 
 
 class ProjectAttachmentInline(admin.TabularInline):
@@ -52,7 +52,7 @@ class ProjectTaskAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'project', 'assigned_to', 'status', 'priority', 'deadline_date', 'is_active')
     list_filter = ('is_active', 'status', 'priority')
     search_fields = ('title', 'project__title', 'assigned_to__email')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'modified_at')
 
 
 @admin.register(TaskComment)
@@ -60,4 +60,20 @@ class TaskCommentAdmin(admin.ModelAdmin):
     list_display = ('id', 'task', 'user', 'hours_spent', 'is_active', 'created_at')
     list_filter = ('is_active',)
     search_fields = ('comment', 'task__title', 'user__email')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'modified_at')
+
+@admin.register(LookupValue)
+class LookupValueAdmin(admin.ModelAdmin):
+    list_display = ('id', 'category', 'name', 'is_default')
+    list_filter = ('category', 'is_default')
+    search_fields = ('name',)
+
+    def has_change_permission(self, request, obj=None):
+        if obj and obj.is_default:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.is_default:
+            return False
+        return super().has_delete_permission(request, obj)

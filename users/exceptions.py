@@ -27,8 +27,8 @@ DATE = 'Date in YYYY-MM-DD format, for example "2026-12-31".'
 
 # Har field ka matlab: error aane par frontend developer ko yahi dikhega
 FIELD_HELP = {
-    'name': 'Text, 2-50 characters. Needs at least one letter. Allowed: letters, numbers, spaces and - _ & . + / ( ). Example: "AI Developer".',
-    'profiles': 'Text. An existing role name such as "Manager", "Team Leader" or "Developer". An unknown role is rejected (create it first with POST /api/profiles/).',
+    'name': 'Text with at least one letter. Profile names: 2-50 characters. Status/type values: 2-100 characters. Example: "AI Developer" or "In Review".',
+    'profiles': 'A profile id (for example 7) or an existing profile name such as "Manager". An unknown profile is rejected (create it first with POST /api/profiles/).',
     'email': 'A valid email address, for example "rahul.sharma@example.com".',
     'email_id': 'A valid and unique client email address.',
     'password': 'Text. Your account password.',
@@ -39,12 +39,12 @@ FIELD_HELP = {
     'gender': 'One of: Male, Female, Other (any letter case).',
     'blood_group': 'One of: A+, A-, B+, B-, AB+, AB-, O+, O-.',
     'phone': 'Digits only, up to 15 characters.',
-    'status': 'Projects and tasks: Pending, In Progress, Completed, On Hold. Users: Active, Inactive.',
+    'status': 'Project/task status. See the allowed values with GET /api/lookups/?category=project_status (or task_status). Users: Active, Inactive.',
     'priority': 'One of: Low, Medium, High (exact case).',
     'title': 'Text, up to 200 characters. Must be unique (projects: across all projects, tasks: inside the project).',
-    'type': 'Text, for example "Web App", "Mobile App" or "AI".',
-    'client': 'Client id (for example 7) or client email. The client must be active.',
-    'assigned_manager': 'User id or email of an active user whose profile is "Manager".',
+    'type': 'Project type. See the allowed values with GET /api/lookups/?category=project_type.',
+    'client': 'User id or email of an active user whose profile is "Client".',
+    'assigned_manager': 'User id or email of an active user whose profile is "Manager". Only a Super Admin or Admin can change it after the project is created. If a Manager creates the project and leaves it empty, he becomes the manager.',
     'assigned_to': 'User id or email of an active user whose profile is "Team Leader" or "Developer".',
     'date_of_completion': DATE,
     'start_date': DATE,
@@ -54,6 +54,7 @@ FIELD_HELP = {
     'comment': 'Text. It cannot be blank.',
     'uploaded_files': 'Send as form-data (not JSON). Allowed: pdf, png, jpg, jpeg, doc, docx, xlsx, txt. Max 10 MB each.',
     'remove_attachment_ids': 'List of attachment ids (not the project id), for example 1.',
+    'category': 'One of: project_type, project_status, task_status.',
 }
 
 _PROFILE = {'name': 'AI Developer'}
@@ -86,6 +87,8 @@ REQUEST_EXAMPLES = {
     'ProjectTaskDetailView': {'priority': 'Medium', 'deadline_date': '2026-11-22'},
     'TaskCommentListCreateView': _COMMENT,
     'TaskCommentDetailView': {'comment': 'Updated comment'},
+    'LookupListCreateView': {'category': 'project_status', 'name': 'In Review'},
+    'LookupDetailView': {'name': 'In Review'},
 }
 
 

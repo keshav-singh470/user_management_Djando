@@ -5,13 +5,14 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, ProtectedError
 
-from .models import User, Client, Project, Profile, ProjectTask, TaskComment
+from .models import User, Client, Project, Profile, ProjectTask, TaskComment, LookupValue
 from .serializers import *
 from .utils import create_and_send_otp, send_welcome_email, verify_otp, send_project_created_emails
 from .permissions import (UserWritePermission, ProfileWritePermission,
-                          ClientWritePermission, ProjectWritePermission, role_of)
+                          ClientWritePermission, ProjectWritePermission, role_of, IsNotClient)
+from .access import visible_projects, visible_tasks, can_see_inactive
 
 from rest_framework.exceptions import NotFound, PermissionDenied, AuthenticationFailed
 from .exceptions import APIError
@@ -37,9 +38,57 @@ def fetch_active(model, pk, label, restore_hint=None):
         raise APIError(msg, status_code=404, hint=hint)
     return obj
 
-PROJECT_STATUSES = ['Pending', 'In Progress', 'Completed', 'On Hold']   # <-- yahan se
-TASK_STATUSES = ['Pending', 'In Progress', 'Completed', 'On Hold']    
+def fetch_visible(model, visible_qs, pk, label, restore_hint=None):
+    """Pehle dekho ye record is user ko dikhna chahiye. Nahi to 404 (existence leak nahi hota)."""
+    if not visible_qs.filter(pk=pk).exists():
+        raise APIError(
+            f'{label} with id {pk} is not available. It was never created, or you do not have access to it.',
+            status_code=404,
+            hint='Use the list endpoint to see the records you can access.')
+    return fetch_active(model, pk, label, restore_hint)
+
+
+def apply_active_filter(request, queryset):
+    """?all=true / ?is_active=false sirf Super Admin, Admin, Manager ke liye. Baaki ko sirf active records."""
+    if not can_see_inactive(request.user):
+        return queryset.filter(is_active=True)
+    if request.query_params.get('all') == 'true':
+        return queryset
+    if request.query_params.get('is_active') == 'false':
+        return queryset.filter(is_active=False)
+    return queryset.filter(is_active=True)
+  
 TASK_PRIORITIES = ['Low', 'Medium', 'High'] 
+
+HARD_DELETE_ROLES = ('Super Admin',)    # only these roles may permanently delete users and projects
+
+# A profile in this list can be given, changed or removed only by the roles listed for it
+PROTECTED_PROFILES = {
+    'Super Admin': ('Super Admin',),
+    'Admin': ('Super Admin', 'Admin'),
+}
+
+
+def check_profile_assignable(request, new_profile):
+    """Blocks e.g. HR from giving the Super Admin or Admin profile."""
+    allowed = PROTECTED_PROFILES.get(new_profile.name) if new_profile else None
+    if allowed and role_of(request.user) not in allowed:
+        raise APIError(f"Only a {' or '.join(allowed)} can give the '{new_profile.name}' profile.",
+                       status_code=403, hint='Ask a Super Admin to do this.')
+
+
+def check_can_manage_user(request, target, action='change'):
+    """Blocks e.g. HR from changing, deleting or restoring a Super Admin or Admin user."""
+    allowed = PROTECTED_PROFILES.get(role_of(target))
+    if allowed and role_of(request.user) not in allowed:
+        raise APIError(f"Only a {' or '.join(allowed)} can {action} a user with the '{role_of(target)}' profile.",
+                       status_code=403, hint='Ask a Super Admin to do this.')
+
+
+def check_not_self(request, target, action):
+    if target.pk == request.user.pk:
+        raise APIError(f'You cannot {action} your own account.', status_code=403,
+                       hint='Ask another Super Admin or Admin to do this.')
 
 def query_int(request, param):
     value = request.query_params.get(param)
@@ -54,6 +103,21 @@ def query_choice(request, param, allowed):
     if value and value.lower() not in [a.lower() for a in allowed]:
         raise APIError(f"'{value}' is not a valid value for ?{param}.",
                        hint=f"Allowed values: {', '.join(allowed)}.")
+    return value
+
+def query_lookup(request, param, category):
+    """?status= / ?type= ko lookup table se check karta hai, galat par suggestion deta hai."""
+    value = request.query_params.get(param)
+    if not value:
+        return None
+    value = value.strip()
+    if not LookupValue.objects.filter(category=category, name__iexact=value).exists():
+        names = list(LookupValue.objects.filter(category=category).values_list('name', flat=True))
+        close = suggest_value(value, names)
+        msg = f"'{value}' is not a valid value for ?{param}."
+        if close:
+            msg += f" Did you mean '{close}'?"
+        raise APIError(msg, hint=f"Allowed values: {', '.join(names) or 'none'}.")
     return value
 
 def query_bool(request, param):
@@ -113,7 +177,8 @@ class UserListCreateView(APIView):
     def post(self, request):
         serializer = UserCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        check_profile_assignable(request, serializer.validated_data.get('profiles'))
+        user = serializer.save(created_by=request.user)
         send_welcome_email(user)
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
@@ -141,8 +206,10 @@ class UserDetailView(APIView):
         user = self.get_object(pk)
         if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        check_can_manage_user(request, user)
         serializer = UserSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        check_profile_assignable(request, serializer.validated_data.get('profiles'))
         serializer.save(modified_by=request.user)
         return Response(serializer.data)
 
@@ -153,8 +220,12 @@ class UserDetailView(APIView):
         user = self.get_object(pk)
         if not user:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        check_can_manage_user(request, user, 'delete')
+        check_not_self(request, user, 'delete')
         if request.query_params.get('hard') == 'true':
+            if role_of(request.user) not in HARD_DELETE_ROLES:
+                raise APIError('Only a Super Admin can permanently delete a user.', status_code=403,
+                               hint='Use DELETE without ?hard=true to deactivate the user instead.')
             user.delete()
             return Response({'message': 'User permanently deleted'}, status=status.HTTP_200_OK)
 
@@ -177,6 +248,7 @@ class UserActivateView(APIView):
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        check_can_manage_user(request, user, 'activate')      
         if user.is_active and user.status == 'Active':
             return Response({'error': f'User {user.email} is already active'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -197,7 +269,8 @@ class UserDeactivateView(APIView):
         try:
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)     
+        check_not_self(request, user, 'deactivate')
         if not user.is_active and user.status == 'Inactive':
             return Response({'error': f'User {user.email} is already inactive'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -229,7 +302,20 @@ class LoginView(APIView):
         if not user or not user.check_password(login_serializer.validated_data['password']):
             raise AuthenticationFailed('Invalid email or password.')
         refresh = RefreshToken.for_user(user)
-        return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])     # record when the user last logged in
+        return Response({
+            'message': 'You have successfully logged in.',
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'email': user.email,
+                'role': role_of(user),
+            },
+        })
 
 class MeView(APIView):
     """GET /api/auth/me/ -> Logged-in user's details and role."""
@@ -326,7 +412,7 @@ class ProfileListCreateView(APIView):
     def post(self, request):
         serializer = ProfileSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        profile = serializer.save()
+        profile = serializer.save(created_by=request.user)
         return Response(ProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
 
 
@@ -361,7 +447,7 @@ class ProfileDetailView(APIView):
             return Response({'error': 'Default profile cannot be updated'}, status=status.HTTP_403_FORBIDDEN)
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(modified_by=request.user)
         return Response(serializer.data)
 
     def put(self, request, pk):
@@ -387,7 +473,7 @@ class ProjectRestoreView(APIView):
 
     def post(self, request, pk):
         try:
-            project = Project.objects.get(pk=pk)    # is_active filter nahi, kyunki deleted wala chahiye
+            project = visible_projects(request.user).get(pk=pk)    # sirf wahi jo is user ko dikhta hai
         except Project.DoesNotExist:
             return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
         if project.is_active:
@@ -438,6 +524,7 @@ class UserRestoreView(APIView):
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        check_can_manage_user(request, user, 'restore')     # 'deactivate' in the deactivate view, 'restore' in restore
         if user.is_active and user.status == 'Active':
             return Response({'error': 'User is already active'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -518,7 +605,7 @@ class ClientDetailView(APIView):
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = ClientSerializer(client, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save(updated_by=request.user)            # Which user updated and saved it ?
+        serializer.save(modified_by=request.user)            # Which user updated and saved it ?
         return Response(serializer.data)
 
     def put(self, request, pk):
@@ -530,6 +617,8 @@ class ClientDetailView(APIView):
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
 
         if request.query_params.get('hard') == 'true':
+            if role_of(request.user) not in HARD_DELETE_ROLES:
+                raise APIError('Only a Super Admin can permanently delete a client.', status_code=403)
             client.delete()
             return Response({'message': 'Client permanently deleted'}, status=status.HTTP_200_OK)
         # Soft delete tracking
@@ -593,22 +682,18 @@ class ProjectListCreateView(APIView):
     permission_classes = [ProjectWritePermission]
     @extend_schema(responses=ProjectSerializer(many=True))
     def get(self, request):
-        if request.query_params.get('all') == 'true':
-            projects = Project.objects.all().prefetch_related('attachments').order_by('-id')
-        elif request.query_params.get('is_active') == 'false':
-            projects = Project.objects.filter(is_active=False).prefetch_related('attachments').order_by('-id')
-        else:
-            projects = Project.objects.filter(is_active=True).prefetch_related('attachments').order_by('-id')
+        projects = apply_active_filter(
+            request, visible_projects(request.user).prefetch_related('attachments').order_by('-id'))
 
         projects = apply_search(projects, request.query_params.get('search'),
-                                ['title', 'type', 'description', 'client__first_name', 'client__last_name',
+                                ['title', 'type__name', 'description', 'client__first_name', 'client__last_name',
                                  'assigned_manager__first_name', 'assigned_manager__last_name'])
-        status_value = query_choice(request, 'status', PROJECT_STATUSES)
+        status_value = query_lookup(request, 'status', 'project_status')
         if status_value:
-            projects = projects.filter(status__iexact=status_value)
-        project_type = request.query_params.get('type')
-        if project_type:
-            projects = projects.filter(type__iexact=project_type)
+            projects = projects.filter(status__name__iexact=status_value)
+        type_value = query_lookup(request, 'type', 'project_type')
+        if type_value:
+            projects = projects.filter(type__name__iexact=type_value)
 
         client_id = query_int(request, 'client')
         if client_id:
@@ -637,7 +722,11 @@ class ProjectListCreateView(APIView):
     def post(self, request):
         serializer = ProjectSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        project = serializer.save(created_by=request.user)
+        extra = {}
+        # Manager project banaye aur manager na de to wo khud manager ban jaata hai (taaki use apna project dikhe)
+        if role_of(request.user) == 'Manager' and not serializer.validated_data.get('assigned_manager'):
+            extra['assigned_manager'] = request.user
+        project = serializer.save(created_by=request.user, **extra)
         send_project_created_emails(project)
         return Response(
             ProjectSerializer(project, context={'request': request, 'include_attachments': True}).data,
@@ -655,7 +744,8 @@ class ProjectDetailView(APIView):
     permission_classes = [ProjectWritePermission]
 
     def get_object(self, pk):
-        return fetch_active(Project, pk, 'Project', f'POST /api/projects/{pk}/restore/')
+        return fetch_visible(Project, visible_projects(self.request.user), pk, 'Project',
+                             f'POST /api/projects/{pk}/restore/')
 
     def get(self, request, pk):
         project = self.get_object(pk)
@@ -668,11 +758,13 @@ class ProjectDetailView(APIView):
     @extend_schema(request=ProjectSerializer, responses=ProjectSerializer)
     def patch(self, request, pk):
         project = self.get_object(pk)
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = ProjectSerializer(project, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        project = serializer.save(updated_by=request.user)
+        new_manager = serializer.validated_data.get('assigned_manager', project.assigned_manager)
+        if new_manager != project.assigned_manager and role_of(request.user) not in ('Super Admin', 'Admin'):
+            raise APIError('Only a Super Admin or Admin can change the manager of a project.', status_code=403,
+                           hint='Ask an Admin to reassign the manager.')
+        project = serializer.save(modified_by=request.user)
         return Response(
             ProjectSerializer(project, context={'request': request, 'include_attachments': True}).data
         )
@@ -682,15 +774,14 @@ class ProjectDetailView(APIView):
 
     def delete(self, request, pk):
         project = self.get_object(pk)
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Hard delete option:
         if request.query_params.get('hard') == 'true':
+            if role_of(request.user) not in HARD_DELETE_ROLES:
+                raise APIError('Only a Super Admin can permanently delete a project.', status_code=403,
+                               hint='Use DELETE without ?hard=true to soft-delete it.')
             project.delete()
             return Response({'message': 'Project permanently deleted'}, status=status.HTTP_200_OK)
 
-        # Soft delete:
         project.is_active = False
         project.deleted_by = request.user
         project.deleted_at = timezone.now()
@@ -702,12 +793,26 @@ class ProjectDetailView(APIView):
 # PROJECT TASK VIEWS
 # ==========================================
 
-TASK_MANAGER_ROLES = ('Manager', 'Team Leader')
+TASK_CREATE_ROLES = ('Super Admin', 'Admin', 'Manager', 'Team Leader')   # who may create tasks
+TASK_OVERRIDE_ROLES = ('Super Admin', 'Admin')                           # full control over every task
 COMMENT_ROLES = ('Manager', 'Team Leader', 'Developer')
 
 
 def can_manage_tasks(user):
-    return role_of(user) in TASK_MANAGER_ROLES
+    """May create tasks."""
+    return role_of(user) in TASK_CREATE_ROLES
+
+
+def can_modify_task(user, task):
+    """May edit, delete or activate this particular task."""
+    role = role_of(user)
+    if role in TASK_OVERRIDE_ROLES:
+        return True
+    if role == 'Manager':
+        return True                              # the task is visible, so it belongs to his project
+    if role == 'Team Leader':
+        return task.created_by_id == user.id     # a Team Leader manages only the tasks he created
+    return False
 
 
 def can_comment(user):
@@ -724,26 +829,23 @@ class ProjectTaskListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_project(self, project_id):
-        return fetch_active(Project, project_id, 'Project', f'POST /api/projects/{project_id}/restore/')
+        return fetch_visible(Project, visible_projects(self.request.user), project_id, 'Project',
+                             f'POST /api/projects/{project_id}/restore/')
 
     def get(self, request, project_id):
         project = self.get_project(project_id)
         if not project:
             return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        tasks = ProjectTask.objects.filter(project=project).select_related('project', 'assigned_to').order_by('-id')
-        if request.query_params.get('all') == 'true':
-            pass
-        elif request.query_params.get('is_active') == 'false':
-            tasks = tasks.filter(is_active=False)
-        else:
-            tasks = tasks.filter(is_active=True)
+        tasks = apply_active_filter(
+            request,
+            visible_tasks(request.user).filter(project=project).select_related('project', 'assigned_to').order_by('-id'))
 
         tasks = apply_search(tasks, request.query_params.get('search'),
                              ['title', 'description', 'assigned_to__first_name', 'assigned_to__last_name'])
-        status_value = query_choice(request, 'status', TASK_STATUSES)
+        status_value = query_lookup(request, 'status', 'task_status')
         if status_value:
-            tasks = tasks.filter(status__iexact=status_value)
+            tasks = tasks.filter(status__name__iexact=status_value)
         priority = query_choice(request, 'priority', TASK_PRIORITIES)
         if priority:
             tasks = tasks.filter(priority__iexact=priority)
@@ -759,7 +861,7 @@ class ProjectTaskListCreateView(APIView):
 
     def post(self, request, project_id):
         if not can_manage_tasks(request.user):
-            return Response({'error': "Only a user with the 'Manager' or 'Team Leader' profile can create a project task."},
+            return Response({'error': "Only a Super Admin, Admin, Manager or Team Leader can create a project task."},
                             status=status.HTTP_403_FORBIDDEN)
         project = self.get_project(project_id)
         if not project:
@@ -778,35 +880,27 @@ class TaskListView(APIView):
     """
     GET /api/tasks/ -> Tasks of all projects
         ?assigned_to=<id> or ?assigned_to=me, ?status=, ?priority=, ?project=<id>, ?search=, ?is_active=false, ?all=true
-    Super Admin / Admin / Manager / Team Leader see all tasks. Other users see only their own tasks.
+    Each role sees only the tasks allowed by users/access.py.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        tasks = ProjectTask.objects.select_related('project', 'assigned_to').order_by('-id')
-        if request.query_params.get('all') == 'true':
-            pass
-        elif request.query_params.get('is_active') == 'false':
-            tasks = tasks.filter(is_active=False)
-        else:
-            tasks = tasks.filter(is_active=True)
+        tasks = apply_active_filter(
+            request, visible_tasks(request.user).select_related('project', 'assigned_to').order_by('-id'))
 
-        sees_all = role_of(request.user) in ('Super Admin', 'Admin', 'Manager', 'Team Leader')
-        if sees_all:
+        if role_of(request.user) in ('Super Admin', 'Admin', 'Manager', 'Team Leader'):
             assigned = request.query_params.get('assigned_to')
             if assigned == 'me':
                 assigned = str(request.user.id)
             if assigned and assigned.isdigit():
                 tasks = tasks.filter(assigned_to_id=assigned)
-        else:
-            tasks = tasks.filter(assigned_to=request.user)
 
         tasks = apply_search(tasks, request.query_params.get('search'),
                              ['title', 'description', 'project__title'])
          
-        status_value = query_choice(request, 'status', TASK_STATUSES)
+        status_value = query_lookup(request, 'status', 'task_status')
         if status_value:
-            tasks = tasks.filter(status__iexact=status_value)
+            tasks = tasks.filter(status__name__iexact=status_value)
         priority = query_choice(request, 'priority', TASK_PRIORITIES)
         if priority:
             tasks = tasks.filter(priority__iexact=priority)
@@ -829,7 +923,7 @@ class ProjectTaskDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk):
-        return fetch_active(ProjectTask, pk, 'Task', f'PUT /api/tasks/{pk}/activate/')
+        return fetch_visible(ProjectTask, visible_tasks(self.request.user), pk, 'Task',f'PUT /api/tasks/{pk}/activate/')
 
     def get(self, request, pk):
         task = self.get_object(pk)
@@ -843,18 +937,17 @@ class ProjectTaskDetailView(APIView):
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
 
         is_assignee = task.assigned_to_id == request.user.id
-        is_manager = can_manage_tasks(request.user)
+        is_manager = can_modify_task(request.user, task)
         if not (is_assignee or is_manager):
-            return Response({'error': 'You are not allowed to update this task.'}, status=status.HTTP_403_FORBIDDEN)
-        if 'status' in request.data and not is_assignee:
-            return Response({'error': 'Only the user assigned to this task can update its status.'},
-                            status=status.HTTP_403_FORBIDDEN)
+            raise APIError('You are not allowed to update this task.', status_code=403,
+                           hint='Only the assigned user, the project Manager, an Admin, or the Team Leader who created it can update it.')
         if not is_manager and set(request.data.keys()) - {'status'}:
-            return Response({'error': 'You can only update the status of your task.'}, status=status.HTTP_403_FORBIDDEN)
+            raise APIError('You can only update the status of your task.', status_code=403,
+                           hint='Send only {"status": "..."}.')
 
         serializer = ProjectTaskSerializer(task, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        task = serializer.save(updated_by=request.user)
+        task = serializer.save(modified_by=request.user)
         return Response(ProjectTaskSerializer(task, context={'request': request, 'include_comments': True}).data)
 
     def put(self, request, pk):
@@ -864,11 +957,14 @@ class ProjectTaskDetailView(APIView):
         task = self.get_object(pk)
         if not task:
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
-        if not can_manage_tasks(request.user):
-            return Response({'error': "Only a user with the 'Manager' or 'Team Leader' profile can delete a project task."},
+        if not can_modify_task(request.user, task):
+            return Response({'error': 'You are not allowed to delete this task.',
+                             'hint': 'Only an Admin, the project Manager, or the Team Leader who created it can delete it.'},
                             status=status.HTTP_403_FORBIDDEN)
         task.is_active = False
-        task.updated_by = request.user
+        task.deleted_at = timezone.now()
+        task.deleted_by = request.user
+        task.modified_by = request.user
         task.save()
         return Response({'message': 'Task soft-deleted successfully'}, status=status.HTTP_200_OK)
 
@@ -877,12 +973,12 @@ class ProjectTaskActivateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
-        if not can_manage_tasks(request.user):
-            return Response({'error': "Only a user with the 'Manager' or 'Team Leader' profile can activate a project task."},
-                            status=status.HTTP_403_FORBIDDEN)
-        task = ProjectTask.objects.filter(pk=pk).select_related('project', 'assigned_to').first()
+        task = visible_tasks(request.user).filter(pk=pk).select_related('project', 'assigned_to').first()
         if not task:
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not can_modify_task(request.user, task):
+            return Response({'error': 'You are not allowed to activate this task.'},
+                            status=status.HTTP_403_FORBIDDEN)
         if task.is_active:
             return Response({'error': 'Task is already active'}, status=status.HTTP_400_BAD_REQUEST)
         if not task.project.is_active:
@@ -892,7 +988,9 @@ class ProjectTaskActivateView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         task.is_active = True
-        task.updated_by = request.user
+        task.deleted_at = None
+        task.deleted_by = None
+        task.modified_by = request.user
         task.save()
         return Response({
             'message': 'Task activated successfully',
@@ -909,10 +1007,11 @@ class TaskCommentListCreateView(APIView):
     GET  /api/tasks/<task_id>/comments/ -> Comments of a task
     POST /api/tasks/<task_id>/comments/ -> Add comment ((Manager / Team Leader / Developer))
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotClient]
 
     def get_task(self, task_id):
-        return fetch_active(ProjectTask, task_id, 'Task', f'PUT /api/tasks/{task_id}/activate/')
+        return fetch_visible(ProjectTask, visible_tasks(self.request.user), task_id, 'Task',
+                             f'PUT /api/tasks/{task_id}/activate/')
 
     def get(self, request, task_id):
         task = self.get_task(task_id)
@@ -933,7 +1032,7 @@ class TaskCommentListCreateView(APIView):
             return Response({'error': 'You are not allowed to comment on this task.'}, status=status.HTTP_403_FORBIDDEN)
         serializer = TaskCommentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        comment = serializer.save(task=task, user=request.user)
+        comment = serializer.save(task=task, user=request.user, created_by=request.user)
         return Response(TaskCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 
@@ -943,10 +1042,10 @@ class TaskCommentDetailView(APIView):
     PATCH  /api/comments/<id>/ -> Edit (only the author)
     DELETE /api/comments/<id>/ -> Soft delete (author or Manager / Team Leader)
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotClient]
 
     def get_object(self, pk):
-        return fetch_active(TaskComment, pk, 'Comment')
+        return fetch_visible(TaskComment, TaskComment.objects.filter(task__in=visible_tasks(self.request.user)),pk, 'Comment')
 
     def get(self, request, pk):
         comment = self.get_object(pk)
@@ -962,7 +1061,7 @@ class TaskCommentDetailView(APIView):
             return Response({'error': 'Only the author can edit this comment.'}, status=status.HTTP_403_FORBIDDEN)
         serializer = TaskCommentSerializer(comment, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save(modified_by=request.user)
         return Response(serializer.data)
 
     def put(self, request, pk):
@@ -979,3 +1078,74 @@ class TaskCommentDetailView(APIView):
         comment.deleted_at = timezone.now()
         comment.save()
         return Response({'message': 'Comment deleted successfully'}, status=status.HTTP_200_OK)
+
+
+# ==========================================
+# LOOKUP VIEWS (project type, project status, task status)
+# ==========================================
+
+class LookupListCreateView(APIView):
+    """
+    GET  /api/lookups/                          -> all values (any logged-in user)
+    GET  /api/lookups/?category=project_status  -> values of one category
+    POST /api/lookups/                          -> add a value (Super Admin / Admin)
+    """
+    permission_classes = [ProfileWritePermission]   # same roles as profiles
+
+    def get(self, request):
+        categories = [c for c, _ in LookupValue.CATEGORY_CHOICES]
+        category = query_choice(request, 'category', categories)
+        values = LookupValue.objects.all()
+        if category:
+            values = values.filter(category=category.lower())
+        return Response(LookupValueSerializer(values, many=True).data)
+
+    def post(self, request):
+        serializer = LookupValueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        value = serializer.save(created_by=request.user)
+        return Response(LookupValueSerializer(value).data, status=status.HTTP_201_CREATED)
+
+
+class LookupDetailView(APIView):
+    """
+    GET    /api/lookups/<id>/ -> single value
+    PATCH  /api/lookups/<id>/ -> rename (not allowed for default values)
+    DELETE /api/lookups/<id>/ -> delete (not allowed for default values or values in use)
+    """
+    permission_classes = [ProfileWritePermission]
+
+    def get_object(self, pk):
+        obj = LookupValue.objects.filter(pk=pk).first()
+        if obj is None:
+            raise APIError(f'Value with id {pk} is not available.',
+                           status_code=404, hint='Use GET /api/lookups/ to see valid ids.')
+        return obj
+
+    def get(self, request, pk):
+        return Response(LookupValueSerializer(self.get_object(pk)).data)
+
+    def patch(self, request, pk):
+        value = self.get_object(pk)
+        if value.is_default:
+            raise APIError('Default value cannot be updated.', status_code=403,
+                           hint='Only values you added yourself can be renamed or deleted.')
+        serializer = LookupValueSerializer(value, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(modified_by=request.user)
+        return Response(serializer.data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        value = self.get_object(pk)
+        if value.is_default:
+            raise APIError('Default value cannot be deleted.', status_code=403,
+                           hint='Only values you added yourself can be renamed or deleted.')
+        try:
+            value.delete()
+        except ProtectedError:
+            raise APIError(f"'{value.name}' is in use by projects or tasks, so it cannot be deleted.",
+                           hint='Change those records to another value first, then delete this one.')
+        return Response({'message': 'Value deleted'}, status=status.HTTP_200_OK)
