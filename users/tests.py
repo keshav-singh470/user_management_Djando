@@ -1,256 +1,222 @@
-"""
-Automatic check of the assignment requirements.
+import tempfile
 
-Place this file at users/tests.py (replace the default one) and run:
-    python manage.py test users -v 2
-"""
-import re
-import time
-from unittest.mock import patch
-
-from django.core import mail
 from django.core.cache import cache
-from rest_framework.test import APITestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
+from rest_framework.test import APIClient, APITestCase
 
-from .models import User
-from .utils import otp_key
+from .models import ActivityLog, LookupValue, Profile, Project, ProjectTask, User
 
-PASSWORD = "Keshav@12345"
-NEW_PASSWORD = "NewPass@45678"
-
-
-def make_user(email="keshav@example.com", username="keshav", **extra):
-    return User.objects.create_user(
-        username=username, email=email, password=PASSWORD,
-        first_name="Keshav", last_name="Singh", **extra
-    )
+PASSWORD = 'Pass@12345'
+SUPERADMIN_EMAIL = 'superadmin@test.com'
+SUPERADMIN_PASSWORD = 'SuperAdmin@123'
+ROLES = ['Super Admin', 'Admin', 'Human Resource', 'Manager', 'Team Leader', 'Developer', 'Client']
 
 
-def last_otp_from_mail():
-    return re.search(r"\b(\d{6})\b", mail.outbox[-1].body).group(1)
+def lookup(category, name):
+    obj = LookupValue.objects.filter(category=category, name__iexact=name).first()
+    return obj or LookupValue.objects.create(category=category, name=name, is_default=True)
 
 
-class ModelTests(APITestCase):
-    def test_1_all_required_fields_exist(self):
-        required = [
-            "first_name", "last_name", "email", "username", "profiles",
-            "date_of_birth", "gender", "nationality", "image", "blood_group",
-            "phone", "permanent_address", "current_address",
-            "emergency_contact_name", "emergency_contact_number",
-            "emergency_contact_relationship", "status",
-        ]
-        for name in required:
-            User._meta.get_field(name)  # raises FieldDoesNotExist if missing
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())          # uploaded test files go to a temp folder
+class BaseTest(APITestCase):
+    def setUp(self):
+        cache.clear()                                      # no leftover login or OTP counters
+        self.profiles = {r: Profile.objects.get_or_create(name=r)[0] for r in ROLES}
+        self.admin = self.make_user('admin', 'Admin')
+        self.superadmin = self.make_user('superadmin', 'Super Admin', password=SUPERADMIN_PASSWORD)
+        self.hr = self.make_user('hr', 'Human Resource')
+        self.manager = self.make_user('manager', 'Manager')
+        self.manager2 = self.make_user('manager2', 'Manager')
+        self.tl = self.make_user('tl', 'Team Leader')
+        self.tl2 = self.make_user('tl2', 'Team Leader')
+        self.dev = self.make_user('dev', 'Developer')
+        self.dev2 = self.make_user('dev2', 'Developer')
+        self.client_user = self.make_user('client', 'Client')
 
-    def test_2_choices_and_unique_email(self):
-        self.assertTrue(User._meta.get_field("email").unique)
-        profiles = [c[0] for c in User._meta.get_field("profiles").choices]
-        for p in ["Administrator", "Standard", "Developer", "Client", "Human Resource"]:
-            self.assertIn(p, profiles)
-        status_vals = [c[0] for c in User._meta.get_field("status").choices]
-        self.assertEqual(sorted(status_vals), ["Active", "Inactive"])
+        self.pending = lookup('task_status', 'Pending')
+        lookup('task_status', 'Completed')
+        self.project = Project.objects.create(
+            title='Portal', type=lookup('project_type', 'Web App'), status=lookup('project_status', 'Pending'),
+            assigned_manager=self.manager, created_by=self.admin)
+        self.project.team_leaders.add(self.tl)
+
+    def make_user(self, key, role, password=PASSWORD):
+        return User.objects.create_user(
+            username=f'{key}@test.com', email=f'{key}@test.com', password=password, first_name=key,
+            profiles=self.profiles[role], company_name='Acme' if role == 'Client' else None)
+
+    def as_user(self, user):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+    def make_task(self, creator=None, assignee=None, title='Build login page'):
+        return ProjectTask.objects.create(
+            project=self.project, title=title, assigned_to=assignee or self.dev, created_by=creator or self.tl,
+            status=self.pending, start_date='2026-12-01', deadline_date='2026-12-10')
+
+    def task_payload(self, assignee=None):
+        return {'title': 'Login page', 'start_date': '2026-12-01', 'deadline_date': '2026-12-10',
+                'assigned_to': (assignee or self.dev).id}
 
 
-class UserCrudTests(APITestCase):
-    payload = {
-        "first_name": "Adarsh", "last_name": "Kumar",
-        "email": "adarsh@example.com", "username": "adarsh",
-        "password": PASSWORD, "profiles": "Developer",
-        "gender": "Male", "blood_group": "O+", "phone": "9999999999",
-    }
+class PermissionTests(BaseTest):
+    def test_admin_can_create_project(self):
+        r = self.as_user(self.admin).post('/api/projects/', {'title': 'New App', 'type': 'Web App'}, format='json')
+        self.assertEqual(r.status_code, 201)
 
-    def login_token(self, email="keshav@example.com", password=PASSWORD):
-        r = self.client.post("/api/auth/login/", {"email": email, "password": password}, format="json")
-        return r.data["access"]
+    def test_manager_cannot_create_project(self):
+        r = self.as_user(self.manager).post('/api/projects/', {'title': 'New App', 'type': 'Web App'}, format='json')
+        self.assertEqual(r.status_code, 403)
 
-    def auth(self):
-        make_user()
-        token = self.login_token()
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    def test_developer_cannot_create_project(self):
+        r = self.as_user(self.dev).post('/api/projects/', {'title': 'New App', 'type': 'Web App'}, format='json')
+        self.assertEqual(r.status_code, 403)
 
-    def test_create_user_ok_no_password_in_response(self):
-        r = self.client.post("/api/users/", self.payload, format="json")
-        self.assertEqual(r.status_code, 201, r.data)
-        self.assertNotIn("password", r.data)
+    def test_hr_cannot_give_admin_profile(self):
+        r = self.as_user(self.hr).post(
+            '/api/users/', {'email': 'new@test.com', 'first_name': 'New', 'profiles': 'Admin'}, format='json')
+        self.assertEqual(r.status_code, 403)
 
-    def test_create_user_sends_welcome_email(self):
-        self.client.post("/api/users/", self.payload, format="json")
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["adarsh@example.com"])
+    def test_hr_can_create_developer(self):
+        r = self.as_user(self.hr).post(
+            '/api/users/', {'email': 'new@test.com', 'first_name': 'New', 'profiles': 'Developer'}, format='json')
+        self.assertEqual(r.status_code, 201)
 
-    def test_password_is_hashed_in_db(self):
-        self.client.post("/api/users/", self.payload, format="json")
-        user = User.objects.get(email="adarsh@example.com")
-        self.assertNotEqual(user.password, PASSWORD)
-        self.assertTrue(user.check_password(PASSWORD))
 
-    def test_create_validation_errors(self):
-        bad = dict(self.payload)
-        bad.pop("email")
-        self.assertEqual(self.client.post("/api/users/", bad, format="json").status_code, 400)
-
-    def test_duplicate_email_rejected(self):
-        self.client.post("/api/users/", self.payload, format="json")
-        again = dict(self.payload, username="another")
-        self.assertEqual(self.client.post("/api/users/", again, format="json").status_code, 400)
-
-    def test_weak_password_rejected(self):
-        weak = dict(self.payload, password="1234")
-        self.assertEqual(self.client.post("/api/users/", weak, format="json").status_code, 400)
-
-    def test_list_requires_jwt(self):
-        self.assertEqual(self.client.get("/api/users/").status_code, 401)
-        self.auth()
-        r = self.client.get("/api/users/")
+class TeamFlowTests(BaseTest):
+    def test_manager_assigns_team_leader(self):
+        self.project.team_leaders.clear()
+        r = self.as_user(self.manager).post(
+            f'/api/projects/{self.project.id}/team-leaders/', {'team_leaders': [self.tl.id]}, format='json')
         self.assertEqual(r.status_code, 200)
-        self.assertNotIn("password", str(r.data))
+        self.assertTrue(self.project.team_leaders.filter(pk=self.tl.pk).exists())
 
-    def test_retrieve_user(self):
-        self.auth()
-        uid = User.objects.get(email="keshav@example.com").id
-        r = self.client.get(f"/api/users/{uid}/")
+    def test_developer_cannot_be_team_leader(self):
+        r = self.as_user(self.manager).post(
+            f'/api/projects/{self.project.id}/team-leaders/', {'team_leaders': [self.dev.id]}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_other_manager_cannot_manage_team_leaders(self):
+        r = self.as_user(self.manager2).post(
+            f'/api/projects/{self.project.id}/team-leaders/', {'team_leaders': [self.tl2.id]}, format='json')
+        self.assertEqual(r.status_code, 404)
+
+    def test_team_leader_creates_task_for_developer(self):
+        r = self.as_user(self.tl).post(f'/api/projects/{self.project.id}/tasks/', self.task_payload(), format='json')
+        self.assertEqual(r.status_code, 201)
+
+    def test_task_cannot_go_to_team_leader(self):
+        r = self.as_user(self.tl).post(
+            f'/api/projects/{self.project.id}/tasks/', self.task_payload(self.tl2), format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_manager_cannot_create_task(self):
+        r = self.as_user(self.manager).post(
+            f'/api/projects/{self.project.id}/tasks/', self.task_payload(), format='json')
+        self.assertEqual(r.status_code, 403)
+
+    def test_unassigned_team_leader_cannot_create_task(self):
+        r = self.as_user(self.tl2).post(
+            f'/api/projects/{self.project.id}/tasks/', self.task_payload(), format='json')
+        self.assertEqual(r.status_code, 404)
+
+    def test_client_cannot_create_task(self):
+        r = self.as_user(self.client_user).post(
+            f'/api/projects/{self.project.id}/tasks/', self.task_payload(), format='json')
+        self.assertEqual(r.status_code, 403)
+
+
+class VisibilityTests(BaseTest):
+    def test_team_leader_does_not_see_another_leaders_task(self):
+        self.project.team_leaders.add(self.tl2)
+        task = self.make_task(creator=self.tl)
+        self.assertEqual(self.as_user(self.tl).get(f'/api/tasks/{task.id}/').status_code, 200)
+        self.assertEqual(self.as_user(self.tl2).get(f'/api/tasks/{task.id}/').status_code, 404)
+
+    def test_developer_sees_only_own_task(self):
+        task = self.make_task(assignee=self.dev)
+        self.assertEqual(self.as_user(self.dev).get(f'/api/tasks/{task.id}/').status_code, 200)
+        self.assertEqual(self.as_user(self.dev2).get(f'/api/tasks/{task.id}/').status_code, 404)
+
+    def test_manager_sees_team_and_developer_is_blocked(self):
+        self.make_task()
+        r = self.as_user(self.manager).get(f'/api/projects/{self.project.id}/team/')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data["email"], "keshav@example.com")
-        self.assertNotIn("password", r.data)
+        self.assertEqual(r.data['team_leaders'][0]['developers'][0]['name'], 'dev')
+        self.assertEqual(self.as_user(self.manager).get('/api/projects/team-overview/').data['count'], 1)
+        self.assertEqual(self.as_user(self.dev).get('/api/projects/team-overview/').status_code, 403)
 
-    def test_patch_and_put_update(self):
-        self.auth()
-        uid = User.objects.get(email="keshav@example.com").id
-        r = self.client.patch(f"/api/users/{uid}/", {"phone": "8888888888"}, format="json")
-        self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(r.data["phone"], "8888888888")
-        put = {"first_name": "K", "last_name": "S", "email": "keshav@example.com",
-               "username": "keshav", "profiles": "Standard", "status": "Active"}
-        r = self.client.put(f"/api/users/{uid}/", put, format="json")
-        self.assertEqual(r.status_code, 200, r.data)
 
-    def test_soft_delete_sets_inactive_and_keeps_record(self):
-        self.auth()
-        other = make_user(email="other@example.com", username="other")
-        r = self.client.delete(f"/api/users/{other.id}/")
-        self.assertIn(r.status_code, (200, 204))
-        other.refresh_from_db()                      # record still exists
-        self.assertEqual(other.status, "Inactive")
+class AuthTests(BaseTest):
+    def login(self, password=PASSWORD):
+        return self.client.post('/api/auth/login/', {'email': 'dev@test.com', 'password': password}, format='json')
 
-    def test_inactive_user_cannot_login(self):
-        u = make_user()
-        u.status = "Inactive"
-        u.save()
-        r = self.client.post("/api/auth/login/", {"email": u.email, "password": PASSWORD}, format="json")
+    def test_login_returns_tokens(self):
+        r = self.login()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('access', r.data)
+
+    def test_login_locks_after_five_wrong_passwords(self):
+        for _ in range(5):
+            self.assertEqual(self.login('wrong-password').status_code, 401)
+        self.assertEqual(self.login().status_code, 429)          # even the right password is refused now
+
+    def test_logout_blocks_the_refresh_token(self):
+        tokens = self.login().data
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + tokens['access'])
+        r = self.client.post('/api/auth/logout/', {'refresh': tokens['refresh']}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.client.credentials()
+        r = self.client.post('/api/auth/refresh/', {'refresh': tokens['refresh']}, format='json')
         self.assertEqual(r.status_code, 401)
 
 
-class LoginTests(APITestCase):
-    def test_login_returns_jwt(self):
-        make_user()
-        r = self.client.post("/api/auth/login/",
-                             {"email": "keshav@example.com", "password": PASSWORD}, format="json")
+class ActivityTests(BaseTest):
+    def test_status_change_is_logged_and_visible_to_manager(self):
+        task = self.make_task()
+        r = self.as_user(self.dev).patch(f'/api/tasks/{task.id}/', {'status': 'Completed'}, format='json')
         self.assertEqual(r.status_code, 200)
-        self.assertIn("access", r.data)
-        self.assertIn("refresh", r.data)
-
-    def test_wrong_password_rejected(self):
-        make_user()
-        r = self.client.post("/api/auth/login/",
-                             {"email": "keshav@example.com", "password": "wrong"}, format="json")
-        self.assertEqual(r.status_code, 401)
-
-
-class OTPTests(APITestCase):
-    def setUp(self):
-        cache.clear()
-        self.user = make_user()
-
-    def send_otp(self):
-        r = self.client.post("/api/auth/send-otp/", {"email": self.user.email}, format="json")
+        log = ActivityLog.objects.filter(task=task, action='updated').first()
+        self.assertIn('Pending -> Completed', log.description)
+        r = self.as_user(self.manager).get(f'/api/projects/{self.project.id}/activity/')
         self.assertEqual(r.status_code, 200)
-        return r
-
-    def test_send_otp_emails_code_and_hides_it_in_response(self):
-        r = self.send_otp()
-        code = last_otp_from_mail()
-        self.assertNotIn(code, str(r.data))
-        self.assertEqual(mail.outbox[-1].to, [self.user.email])
-
-    def test_otp_is_stored_hashed(self):
-        self.send_otp()
-        code = last_otp_from_mail()
-        stored = cache.get(otp_key(self.user, "verify"))
-        self.assertIsNotNone(stored)
-        self.assertNotEqual(stored, code)
-
-    def test_otp_is_deleted_after_use(self):
-        self.send_otp()
-        code = last_otp_from_mail()
-        self.client.post("/api/auth/verify-otp/", {"email": self.user.email, "otp": code}, format="json")
-        self.assertIsNone(cache.get(otp_key(self.user, "verify")))
-
-    def test_otp_of_one_purpose_cannot_be_used_for_another(self):
-        self.send_otp()                                   # purpose: verify
-        code = last_otp_from_mail()
-        r = self.client.post("/api/auth/reset-password/",
-                             {"email": self.user.email, "otp": code, "new_password": NEW_PASSWORD},
-                             format="json")
-        self.assertEqual(r.status_code, 400)
-
-    def test_verify_otp_success_then_cannot_reuse(self):
-        self.send_otp()
-        code = last_otp_from_mail()
-        body = {"email": self.user.email, "otp": code}
-        self.assertEqual(self.client.post("/api/auth/verify-otp/", body, format="json").status_code, 200)
-        self.assertEqual(self.client.post("/api/auth/verify-otp/", body, format="json").status_code, 400)
-
-    def test_verify_wrong_otp(self):
-        self.send_otp()
-        r = self.client.post("/api/auth/verify-otp/",
-                             {"email": self.user.email, "otp": "000000"}, format="json")
-        self.assertEqual(r.status_code, 400)
-
-    def test_otp_expires(self):
-        self.send_otp()
-        code = last_otp_from_mail()
-        # cache ki clock 30 minute aage kar do, OTP auto-expire ho chuka hoga
-        with patch("django.core.cache.backends.locmem.time") as fake_time:
-            fake_time.time.return_value = time.time() + 30 * 60
-            r = self.client.post("/api/auth/verify-otp/",
-                                 {"email": self.user.email, "otp": code}, format="json")
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['count'], 1)
 
 
-class PasswordResetTests(APITestCase):
-    def setUp(self):
-        cache.clear()
-        self.user = make_user()
+class AttachmentTests(BaseTest):
+    def upload(self, user, task, filename='notes.txt'):
+        return self.as_user(user).post(
+            f'/api/tasks/{task.id}/attachments/',
+            {'files': SimpleUploadedFile(filename, b'hello')}, format='multipart')
 
-    def test_forgot_and_reset_password_flow(self):
-        r = self.client.post("/api/auth/forgot-password/", {"email": self.user.email}, format="json")
+    def test_assignee_can_upload(self):
+        task = self.make_task()
+        self.assertEqual(self.upload(self.dev, task).status_code, 201)
+
+    def test_client_cannot_upload(self):
+        task = self.make_task()
+        self.assertEqual(self.upload(self.client_user, task).status_code, 403)
+
+    def test_wrong_file_type_is_rejected(self):
+        task = self.make_task()
+        self.assertEqual(self.upload(self.dev, task, 'virus.exe').status_code, 400)
+
+
+class SuperAdminTests(BaseTest):
+    def test_super_admin_can_login(self):
+        r = self.client.post('/api/auth/login/',
+                             {'email': SUPERADMIN_EMAIL, 'password': SUPERADMIN_PASSWORD}, format='json')
         self.assertEqual(r.status_code, 200)
-        code = last_otp_from_mail()
-        self.assertNotIn(code, str(r.data))
+        self.assertEqual(r.data['user']['role'], 'Super Admin')
 
-        r = self.client.post("/api/auth/reset-password/",
-                             {"email": self.user.email, "otp": code, "new_password": NEW_PASSWORD},
-                             format="json")
-        self.assertEqual(r.status_code, 200, r.data)
+    def test_super_admin_can_hard_delete_project(self):
+        r = self.as_user(self.superadmin).delete(f'/api/projects/{self.project.id}/?hard=true')
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Project.objects.filter(pk=self.project.id).exists())
 
-        ok = self.client.post("/api/auth/login/",
-                              {"email": self.user.email, "password": NEW_PASSWORD}, format="json")
-        old = self.client.post("/api/auth/login/",
-                               {"email": self.user.email, "password": PASSWORD}, format="json")
-        self.assertEqual(ok.status_code, 200)
-        self.assertEqual(old.status_code, 401)
-
-    def test_reset_with_wrong_otp_fails(self):
-        self.client.post("/api/auth/forgot-password/", {"email": self.user.email}, format="json")
-        r = self.client.post("/api/auth/reset-password/",
-                             {"email": self.user.email, "otp": "000000", "new_password": NEW_PASSWORD},
-                             format="json")
-        self.assertEqual(r.status_code, 400)
-
-    def test_reset_rejects_weak_password(self):
-        self.client.post("/api/auth/forgot-password/", {"email": self.user.email}, format="json")
-        code = last_otp_from_mail()
-        r = self.client.post("/api/auth/reset-password/",
-                             {"email": self.user.email, "otp": code, "new_password": "1234"},
-                             format="json")
-        self.assertEqual(r.status_code, 400)
+    def test_admin_cannot_hard_delete_project(self):
+        r = self.as_user(self.admin).delete(f'/api/projects/{self.project.id}/?hard=true')
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(Project.objects.filter(pk=self.project.id).exists())

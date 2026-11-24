@@ -45,12 +45,15 @@ class RoleWritePermission(BasePermission):
 class UserWritePermission(RoleWritePermission):
     write_roles = ('Super Admin', 'Admin', 'Human Resource')
 
-class ProfileWritePermission(RoleWritePermission):
+class ProfileWritePermission(RoleWritePermission):      # used for profiles and lookups
     write_roles = ('Super Admin', 'Admin')
 
-class ClientWritePermission(RoleWritePermission):      # OLD: Client table ke liye, Sir ke kehne par hatana hai
+
+class ClientWritePermission(RoleWritePermission):      # OLD: for the Client table, to be removed
     write_roles = ('Super Admin', 'Admin', 'Manager')
 
+
 class ProjectWritePermission(RoleWritePermission):
-    write_roles = ('Super Admin', 'Admin', 'Manager')
-    client_can_read = True          # Client apne projects padh sakta hai (scoping views mein hai)
+    write_roles = ('Super Admin', 'Admin')              # a Manager only views projects
+    client_can_read = True 
+        

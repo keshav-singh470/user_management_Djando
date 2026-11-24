@@ -147,6 +147,9 @@ class Project(AuditModel):
     client = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                related_name='client_projects', limit_choices_to={'profiles__name': 'Client'})
     assigned_manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='managed_projects')
+    # Team Leaders assigned by the Manager (a project may have many, a Team Leader may be on many projects)
+    team_leaders = models.ManyToManyField(User, blank=True, related_name='led_projects',
+                                          limit_choices_to={'profiles__name': 'Team Leader'})
 
     # Restore tracking (defined here because Project supports restore)
     restored_at = models.DateTimeField(null=True, blank=True)
@@ -211,3 +214,34 @@ class TaskComment(AuditModel):
 
     def __str__(self):
         return f"Comment on {self.task.title}"
+
+class TaskAttachment(models.Model):
+    """A file attached to a task. Hard delete only, like ProjectAttachment."""
+    task = models.ForeignKey(ProjectTask, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='task_attachments/')
+    file_name = models.CharField(max_length=255, blank=True)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='task_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.file_name} ({self.task.title})"
+
+
+class ActivityLog(models.Model):
+    """Who did what and when. Rows are only added, never edited or deleted through the API."""
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities')
+    task = models.ForeignKey(ProjectTask, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities')
+    action = models.CharField(max_length=20)            # created, updated, deleted, restored, assigned, commented, attached
+    description = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return self.description

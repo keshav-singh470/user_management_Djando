@@ -44,8 +44,8 @@ FIELD_HELP = {
     'title': 'Text, up to 200 characters. Must be unique (projects: across all projects, tasks: inside the project).',
     'type': 'Project type. See the allowed values with GET /api/lookups/?category=project_type.',
     'client': 'User id or email of an active user whose profile is "Client".',
-    'assigned_manager': 'User id or email of an active user whose profile is "Manager". Only a Super Admin or Admin can change it after the project is created. If a Manager creates the project and leaves it empty, he becomes the manager.',
-    'assigned_to': 'User id or email of an active user whose profile is "Team Leader" or "Developer".',
+    'assigned_manager': 'User id or email of an active user whose profile is "Manager". Only a Super Admin or Admin can set or change it.',
+    'assigned_to': 'User id or email of an active user whose profile is "Developer".',
     'date_of_completion': DATE,
     'start_date': DATE,
     'deadline_date': DATE + ' Must not be before start_date or after the project completion date.',
@@ -54,7 +54,7 @@ FIELD_HELP = {
     'comment': 'Text. It cannot be blank.',
     'uploaded_files': 'Send as form-data (not JSON). Allowed: pdf, png, jpg, jpeg, doc, docx, xlsx, txt. Max 10 MB each.',
     'remove_attachment_ids': 'List of attachment ids (not the project id), for example 1.',
-    'category': 'One of: project_type, project_status, task_status.',
+    'team_leaders': 'List of Team Leader user ids or emails, for example [9, "neha@acme.com"].',
 }
 
 _PROFILE = {'name': 'AI Developer'}
@@ -89,6 +89,8 @@ REQUEST_EXAMPLES = {
     'TaskCommentDetailView': {'comment': 'Updated comment'},
     'LookupListCreateView': {'category': 'project_status', 'name': 'In Review'},
     'LookupDetailView': {'name': 'In Review'},
+    'ProjectTeamLeaderView': {'team_leaders': [9]},
+    'LogoutView': {'refresh': '<your_refresh_token>'},
 }
 
 

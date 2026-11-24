@@ -50,5 +50,16 @@ urlpatterns = [
 
     # Auth endpoints ke saath
     path('auth/refresh/', TokenRefreshView.as_view()),
+    path('projects/team-overview/', views.ProjectTeamOverviewView.as_view()),
+    path('projects/<int:pk>/team/', views.ProjectTeamView.as_view()),
+    path('projects/<int:pk>/team-leaders/', views.ProjectTeamLeaderView.as_view()),
+    path('projects/<int:pk>/team-leaders/<int:user_id>/', views.ProjectTeamLeaderView.as_view()),
+    path('me/work/', views.MyWorkView.as_view()),
+    path('users/<int:pk>/work/', views.UserWorkView.as_view()),
+    path('auth/logout/', views.LogoutView.as_view()),
+    path('projects/<int:pk>/activity/', views.ProjectActivityView.as_view()),
+    path('tasks/<int:pk>/activity/', views.TaskActivityView.as_view()),
+    path('tasks/<int:task_id>/attachments/', views.TaskAttachmentListCreateView.as_view()),
+    path('attachments/<int:pk>/', views.TaskAttachmentDetailView.as_view()),
      
 ]

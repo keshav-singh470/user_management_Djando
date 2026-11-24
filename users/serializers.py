@@ -1,6 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import User, Client, Profile, Project, ProjectAttachment, ProjectTask, TaskComment, LookupValue
+from .models import User, Client, Profile, Project, ProjectAttachment, ProjectTask, TaskComment, LookupValue, TaskAttachment
 from django.core.cache import cache
 from django.db.models import Q
 
@@ -545,6 +545,7 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         required=False, 
         allow_null=True
     )
+    team_leaders = serializers.SerializerMethodField()      # read-only, assigned through its own endpoint
     client = ManagerRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
     
     type = LookupField(category='project_type', required=True, allow_null=False,
@@ -587,6 +588,9 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
 
     def get_deleted_by(self, obj):
         return self._format_user(obj.deleted_by)
+
+    def get_team_leaders(self, obj):
+        return [_user_summary(u) for u in obj.team_leaders.all()]
 
     def get_attachments(self, obj):                   # Project_Attachment 
         request = self.context.get('request')
@@ -684,13 +688,15 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     
 
 
+    LIST_FIELDS = ('id', 'title', 'type', 'status', 'client', 'assigned_manager', 'team_leaders',
+                   'date_of_completion', 'tasks_count', 'attachments_count')
+
     def to_representation(self, instance):
         ret = super().to_representation(instance)
-        # Format client in response like created_by
         ret['client'] = self._format_client(instance.client)
         ret['assigned_manager'] = self._format_user(instance.assigned_manager)
         if _is_client(self):
-            for field in ('created_by', 'modified_by', 'deleted_by', 'restored_by'):
+            for field in ('created_by', 'modified_by', 'deleted_by', 'restored_by', 'team_leaders'):
                 ret.pop(field, None)
         # Do not include null audit fields in the response.
         for field in ['deleted_at', 'deleted_by', 'modified_by', 'restored_at', 'restored_by']:
@@ -698,15 +704,41 @@ class ProjectSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
                 ret.pop(field, None)
         if not instance.modified_by:
             ret.pop('modified_at', None)
-        # List me files ki poori list mat bhejo, sirf detail me bhejo
-        if not self.context.get('include_attachments'):
-            ret.pop('attachments', None)
+        if not self.context.get('include_attachments'):          # list view: short version
+            for key in ('client', 'assigned_manager'):
+                person = ret.get(key)
+                if person:
+                    ret[key] = {'id': person['id'],
+                                'name': f"{person['first_name']} {person['last_name']}".strip()}
+            if 'team_leaders' in ret:
+                ret['team_leaders'] = [{'id': p['id'], 'name': f"{p['first_name']} {p['last_name']}".strip()}
+                                       for p in ret['team_leaders']]
+            ret = {k: ret[k] for k in self.LIST_FIELDS if k in ret}
         if getattr(instance, '_removed', None):
             ret['removed_attachments'] = instance._removed
             ret['note'] = 'Removed attachments are permanently deleted and cannot be restored.'
         if getattr(instance, '_added', None):
             ret['added_files'] = instance._added
         return ret
+
+
+class TeamLeaderAssignSerializer(serializers.Serializer):
+    team_leaders = serializers.ListField(
+        child=ManagerRelatedField(queryset=User.objects.all()),
+        allow_empty=False,
+        error_messages={'required': 'team_leaders is required, for example {"team_leaders": [9]}.',
+                        'empty': 'Send at least one Team Leader id or email.'})
+
+    def validate_team_leaders(self, users):
+        for user in users:
+            if not user.is_active or user.status != 'Active':
+                raise serializers.ValidationError(f"User {user.id} ({user.email}) is inactive.")
+            role = user.profiles.name if user.profiles else None
+            if role != 'Team Leader':
+                raise serializers.ValidationError(
+                    f"User {user.id} ({user.email}) has the profile '{role or 'none'}'. "
+                    f"Only a 'Team Leader' can be assigned to a project.")
+        return list(dict.fromkeys(users))      # remove duplicates, keep the order
 
 # ==========================================
 # PROJECT ATTACHMENT SERIALIZER
@@ -731,6 +763,19 @@ class ProjectAttachmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'file', 'file_name', 'uploaded_at']
         read_only_fields = fields
         
+class TaskAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TaskAttachment
+        fields = ['id', 'file', 'file_name', 'uploaded_by', 'uploaded_at']
+        read_only_fields = fields
+
+    def get_uploaded_by(self, obj):
+        user = obj.uploaded_by
+        if not user:
+            return None
+        return {'id': user.id, 'name': f'{user.first_name} {user.last_name}'.strip() or user.email}
 
     
 # ==========================================
@@ -779,6 +824,7 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     modified_by = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
     comments_count = serializers.SerializerMethodField()
+    attachments_count = serializers.SerializerMethodField()
 
     # id ya email se user assign hoga (ManagerRelatedField ki tarah)
     assigned_to = ManagerRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
@@ -810,6 +856,9 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def get_comments_count(self, obj):
         return obj.comments.filter(is_active=True).count()
 
+    def get_attachments_count(self, obj):
+        return obj.attachments.count()
+
     def validate_assigned_to(self, user):
         if user is None:
             return user
@@ -818,10 +867,10 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
                 f"User {user.id} ({user.email}) is inactive (deleted). Restore the user with "
                 f"PUT /api/users/{user.id}/restore/ or choose another active user.")
         role = user.profiles.name if user.profiles else None
-        if role not in ('Team Leader', 'Developer'):
+        if role != 'Developer':
             raise serializers.ValidationError(
                 f"User {user.id} ({user.email}) has the profile '{role or 'none'}'. "
-                f"Only a 'Team Leader' or 'Developer' can be assigned to a task.")
+                f"Only a 'Developer' can be assigned to a task.")
         return user
 
     def validate_title(self, value):
@@ -865,7 +914,7 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         ret['project'] = {"id": instance.project.id, "title": instance.project.title}
         ret['assigned_to'] = _user_summary(instance.assigned_to)
         if _is_client(self):
-            for field in ('comments', 'comments_count', 'estimated_hours', 'created_by', 'modified_by'):
+            for field in ('comments', 'comments_count','attachments_count', 'estimated_hours', 'created_by', 'modified_by'):
                 ret.pop(field, None)
             if ret.get('assigned_to'):
                 ret['assigned_to'] = {k: ret['assigned_to'][k] for k in ('id', 'first_name', 'last_name')}
