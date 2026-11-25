@@ -136,20 +136,23 @@ def custom_exception_handler(exc, context):
         body['message'] = 'The request body could not be read.'
         hint = hint or ('Send valid JSON with the header Content-Type: application/json. '
                         'Check for missing quotes, commas or brackets.')
-        if example:
+        if settings.DEBUG and example:
             body['example_request'] = example
 
     elif isinstance(exc, exceptions.ValidationError):
         errors = original if isinstance(original, dict) else {'non_field_errors': original}
         body['message'] = 'Validation failed. Please correct the errors below.'
         body['errors'] = errors
-        field_help = {f: FIELD_HELP[f] for f in errors if f in FIELD_HELP}
-        if field_help:
-            body['field_help'] = field_help
-        if example:
-            body['example_request'] = example
-        hint = hint or ('Each key in "errors" is a field name and its value says what to fix. '
-                        '"field_help" shows the expected format.')
+        if settings.DEBUG:                       # extra guidance sirf local/dev me, production me chhota response
+            field_help = {f: FIELD_HELP[f] for f in errors if f in FIELD_HELP}
+            if field_help:
+                body['field_help'] = field_help
+            if example:
+                body['example_request'] = example
+            hint = hint or ('Each key in "errors" is a field name and its value says what to fix. '
+                            '"field_help" shows the expected format.')
+        else:
+            hint = hint or 'Each key in "errors" is a field name and its value says what to fix.'
 
     elif code == 401:
         err_code = original.get('code') if isinstance(original, dict) else None
