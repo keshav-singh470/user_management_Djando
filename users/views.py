@@ -8,7 +8,7 @@ from django.core.cache import cache
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
-from django.db.models import Q, ProtectedError, Prefetch
+from django.db.models import Q, ProtectedError, Prefetch, Count
 
 from .models import User, Client, Project, Profile, ProjectTask, TaskComment, LookupValue, ActivityLog, TaskAttachment
 from .serializers import *
@@ -238,7 +238,9 @@ class UserDetailView(APIView):
         user.deleted_by = request.user
         user.is_active = False
         user.save()
-        return Response({'message': 'User deactivated successfully (soft delete)'}, status=status.HTTP_200_OK)
+        return Response({'message': 'User has been deleted.',
+                         'hint': f'It can be restored with PUT /api/users/{pk}/restore/.'},
+                        status=status.HTTP_200_OK)
 
 
 class UserActivateView(APIView):
@@ -636,7 +638,9 @@ class ClientDetailView(APIView):
         client.deleted_by = request.user    # Which user deleted it ?
         client.deleted_at = timezone.now()  # At what time was it deleted ?
         client.save()
-        return Response({'message': 'Client deactivated successfully (soft delete)'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Client has been deleted.',
+                         'hint': f'It can be restored with POST /api/clients/{pk}/restore/.'},
+                        status=status.HTTP_200_OK)
 
 
 class ClientActivateView(APIView):
@@ -798,7 +802,9 @@ class ProjectDetailView(APIView):
         project.deleted_at = timezone.now()
         project.save()
         log_activity(request.user, 'deleted', f'Deleted project "{project.title}"', project=project)
-        return Response({'message': 'Project soft-deleted successfully'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Project has been deleted.',
+                         'hint': f'It can be restored with POST /api/projects/{pk}/restore/.'},
+                        status=status.HTTP_200_OK)
 
 
 # ==========================================
@@ -807,7 +813,7 @@ class ProjectDetailView(APIView):
 
 TASK_CREATE_ROLES = ('Super Admin', 'Admin', 'Team Leader')              # who may create tasks
 TASK_OVERRIDE_ROLES = ('Super Admin', 'Admin')                           # full control over every task
-COMMENT_ROLES = ('Manager', 'Team Leader', 'Developer')
+COMMENT_ROLES = ('Super Admin', 'Admin', 'Manager', 'Team Leader', 'Developer')
 COMMENT_MODERATOR_ROLES = ('Super Admin', 'Admin', 'Manager', 'Team Leader')   # may delete anyone's comment
 
 
@@ -985,7 +991,9 @@ class ProjectTaskDetailView(APIView):
         task.modified_by = request.user
         task.save()
         log_activity(request.user, 'deleted', f'Deleted task "{task.title}"', project=task.project, task=task)
-        return Response({'message': 'Task soft-deleted successfully'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Task has been deleted.',
+                         'hint': f'It can be restored with PUT /api/tasks/{pk}/activate/.'},
+                        status=status.HTTP_200_OK)
 
 class ProjectTaskActivateView(APIView):
     """PUT /api/tasks/<id>/activate/ -> Soft-deleted task ko wapas active karna (Manager / Team Leader only)"""
@@ -1561,3 +1569,45 @@ class TaskAttachmentDetailView(APIView):
         log_activity(request.user, 'deleted', f'Deleted file "{name}" from task "{task.title}"',
                      project=task.project, task=task)
         return Response({'message': 'File deleted permanently.', 'id': pk})
+
+# ==========================================
+# DASHBOARD
+# ==========================================
+
+class DashboardView(APIView):
+    """
+    GET /api/dashboard/ -> summary counts, scoped to what this user can see.
+    Admin/Super Admin: whole system. Manager: own projects. Team Leader/Developer: their own work.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = timezone.localdate()
+        month_start = today.replace(day=1)
+
+        projects = visible_projects(request.user).filter(is_active=True)
+        tasks = visible_tasks(request.user).filter(is_active=True)
+
+        project_status_counts = {}
+        for row in projects.values('status__name').annotate(count=Count('id')):
+            project_status_counts[row['status__name'] or 'No status'] = row['count']
+
+        task_status_counts = {}
+        for row in tasks.values('status__name').annotate(count=Count('id')):
+            task_status_counts[row['status__name'] or 'No status'] = row['count']
+
+        completed_this_month = tasks.filter(
+            status__name='Completed', completion_date__gte=month_start, completion_date__lte=today
+        ).count()
+        overdue = tasks.filter(deadline_date__lt=today).exclude(status__name='Completed').count()
+
+        return Response({
+            'as_of': today,
+            'projects': {'total': projects.count(), 'by_status': project_status_counts},
+            'tasks': {
+                'total': tasks.count(),
+                'by_status': task_status_counts,
+                'completed_this_month': completed_this_month,
+                'overdue': overdue,
+            },
+        })

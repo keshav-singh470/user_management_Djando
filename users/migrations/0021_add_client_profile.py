@@ -3,11 +3,21 @@
 from django.db import migrations
 
 
+def add_client_profile(apps, schema_editor):
+    Profile = apps.get_model('users', 'Profile')
+    Profile.objects.get_or_create(name='Client', defaults={'is_default': True})
+
+
+def remove_client_profile(apps, schema_editor):
+    Profile = apps.get_model('users', 'Profile')
+    Profile.objects.filter(name='Client', is_default=True).delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('users', '0020_remove_projecttask_deleted_at_and_more'),
     ]
 
-    operations = [
+    operations = [migrations.RunPython(add_client_profile, remove_client_profile)
     ]

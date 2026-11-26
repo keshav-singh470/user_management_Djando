@@ -35,12 +35,14 @@ INSTALLED_APPS = [
     # I have added new
     'rest_framework',
     'users',
+    'corsheaders'
 ]
 
 # Custom user model (sabse zaroori)
 AUTH_USER_MODEL = 'users.User'
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',      # NEW: static files serve karega
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -179,3 +181,9 @@ if not DEBUG:
     SECURE_REDIRECT_EXEMPT = [r'^api/health/$']
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+# Frontend (React dev server) se aane wali requests allow karne ke liye
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]

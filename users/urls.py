@@ -61,5 +61,5 @@ urlpatterns = [
     path('tasks/<int:pk>/activity/', views.TaskActivityView.as_view()),
     path('tasks/<int:task_id>/attachments/', views.TaskAttachmentListCreateView.as_view()),
     path('attachments/<int:pk>/', views.TaskAttachmentDetailView.as_view()),
-     
+    path('dashboard/', views.DashboardView.as_view()),
 ]
