@@ -768,6 +768,20 @@ class ProjectDetailView(APIView):
     @extend_schema(request=ProjectSerializer, responses=ProjectSerializer)
     def patch(self, request, pk):
         project = self.get_object(pk)
+        # A Manager can only touch status/description of a project — everything
+        # else (title, type, client, assigned_manager, team_leaders) stays
+        # Super Admin / Admin only, even though write_roles now includes Manager.
+
+        role = role_of(request.user)
+        if role == 'Manager':
+            not_allowed = set(request.data.keys()) - {'status', 'description'}
+            if not_allowed:
+                raise APIError(
+                    'As a Manager you can only update a project\'s status and description.',
+                    status_code=403,
+                    hint=f"Remove these field(s) from your request: {', '.join(sorted(not_allowed))}."
+                )
+
         before = project_snapshot(project)
         serializer = ProjectSerializer(project, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -955,7 +969,7 @@ class ProjectTaskDetailView(APIView):
         if not task:
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        is_assignee = task.assigned_to_id == request.user.id
+        is_assignee = task.assigned_to.filter(id=request.user.id).exists()
         is_manager = can_modify_task(request.user, task)
         if not (is_assignee or is_manager):
             raise APIError('You are not allowed to update this task.', status_code=403,

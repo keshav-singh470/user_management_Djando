@@ -54,6 +54,6 @@ class ClientWritePermission(RoleWritePermission):      # OLD: for the Client tab
 
 
 class ProjectWritePermission(RoleWritePermission):
-    write_roles = ('Super Admin', 'Admin')              # a Manager only views projects
+    write_roles = ('Super Admin', 'Admin', 'Manager')              # a Manager only views projects
     client_can_read = True 
         

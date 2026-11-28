@@ -98,8 +98,19 @@ class User(AbstractUser, AuditModel):
     image = models.ImageField(upload_to='users/', null=True, blank=True)
     blood_group = models.CharField(max_length=3, choices=BLOOD_CHOICES, blank=True, null=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
-    permanent_address = models.TextField(blank=True, null=True)
-    current_address = models.TextField(blank=True, null=True)
+    permanent_address = models.CharField(max_length=200, blank=True, null=True)
+    permanent_address_2 = models.CharField(max_length=200, blank=True, null=True)
+    permanent_city = models.CharField(max_length=100, blank=True, null=True)
+    permanent_state = models.CharField(max_length=100, blank=True, null=True)
+    permanent_country = models.CharField(max_length=100, blank=True, null=True)
+    permanent_zip_code = models.CharField(max_length=20, blank=True, null=True)
+
+    current_address = models.CharField(max_length=200, blank=True, null=True)
+    current_address_2 = models.CharField(max_length=200, blank=True, null=True)
+    current_city = models.CharField(max_length=100, blank=True, null=True)
+    current_state = models.CharField(max_length=100, blank=True, null=True)
+    current_country = models.CharField(max_length=100, blank=True, null=True)
+    current_zip_code = models.CharField(max_length=20, blank=True, null=True)
     emergency_contact_name = models.CharField(max_length=100, blank=True, null=True)
     emergency_contact_number = models.CharField(max_length=15, blank=True, null=True)
     emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
@@ -182,7 +193,7 @@ class ProjectTask(AuditModel):
     PRIORITY_CHOICES = [('Low', 'Low'), ('Medium', 'Medium'), ('High', 'High')]
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='tasks')
-    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+    assigned_to = models.ManyToManyField(User, blank=True, related_name='assigned_tasks', limit_choices_to={'profiles__name': 'Developer'})
 
     title = models.CharField(max_length=200, null=True, blank=True)
     description = models.TextField(null=True, blank=True)

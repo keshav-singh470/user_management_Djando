@@ -49,10 +49,18 @@ class ProfileAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectTask)
 class ProjectTaskAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'project', 'assigned_to', 'status', 'priority', 'deadline_date', 'is_active')
+    list_display = ('id', 'title', 'project', 'get_assigned_to', 'status', 'priority', 'deadline_date', 'is_active')
     list_filter = ('is_active', 'status', 'priority')
     search_fields = ('title', 'project__title', 'assigned_to__email')
     readonly_fields = ('created_at', 'modified_at')
+    filter_horizontal = ('assigned_to',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('assigned_to')
+
+    @admin.display(description='Assigned To')
+    def get_assigned_to(self, obj):
+        return ", ".join(u.email for u in obj.assigned_to.all())
 
 
 @admin.register(TaskComment)

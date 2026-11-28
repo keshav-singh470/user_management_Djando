@@ -187,7 +187,9 @@ class UserSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
         fields = [
             'id', 'first_name', 'last_name', 'email', 'username', 'profiles',
             'date_of_birth', 'gender', 'nationality', 'image', 'blood_group',
-            'phone', 'permanent_address', 'current_address',
+            'phone', 'permanent_address', 'permanent_address_2', 'permanent_city', 
+            'permanent_state', 'permanent_country', 'permanent_zip_code','current_address',
+            'current_address_2', 'current_city', 'current_state', 'current_country', 'current_zip_code',
             'emergency_contact_name', 'emergency_contact_number',
             'emergency_contact_relationship', 'status','company_name',
             'created_at', 'created_by', 'modified_at', 'modified_by',
@@ -827,7 +829,7 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     attachments_count = serializers.SerializerMethodField()
 
     # id ya email se user assign hoga (ManagerRelatedField ki tarah)
-    assigned_to = ManagerRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    assigned_to = ManagerRelatedField(queryset=User.objects.all(), many=True, required=False)
     status = LookupField(category='task_status', required=False)
 
     class Meta:
@@ -912,7 +914,7 @@ class ProjectTaskSerializer(SuggestFieldsMixin, serializers.ModelSerializer):
     def to_representation(self, instance):
         ret = super().to_representation(instance)
         ret['project'] = {"id": instance.project.id, "title": instance.project.title}
-        ret['assigned_to'] = _user_summary(instance.assigned_to)
+        ret['assigned_to'] = [_user_summary(u) for u in instance.assigned_to.all()]
         if _is_client(self):
             for field in ('comments', 'comments_count','attachments_count', 'estimated_hours', 'created_by', 'modified_by'):
                 ret.pop(field, None)
